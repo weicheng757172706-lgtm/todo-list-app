@@ -1,0 +1,8 @@
+.workbuddy/
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+todo_data.json
+*.exe
