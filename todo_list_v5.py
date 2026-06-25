@@ -34,7 +34,7 @@ class TodoApp:
     
     def __init__(self, root):
         self.root = root
-        self.root.title(f"ToDoList（w.c.）v{VERSION}")
+        self.root.title("ToDoList（w.c.）")
         self.root.geometry("900x650")
         self.root.minsize(700, 500)
         
@@ -170,7 +170,7 @@ class TodoApp:
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
 
-        title_label = tk.Label(title_frame, text=f"ToDoList（w.c.）v{VERSION}",
+        title_label = tk.Label(title_frame, text="ToDoList（w.c.）",
                                font=self.font_title,
                                bg="#4F81BD", fg="white")
         title_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
