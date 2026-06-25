@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.4"
+VERSION = "6.5"
 
 import json
 import os
@@ -305,10 +305,23 @@ class TodoApp:
     
     def setup_stats_tab(self, parent):
         """Setup statistics tab with overview and breakdown tables"""
+        # ── 0. Week filter ──
+        filter_frame = tk.Frame(parent)
+        filter_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
+        
+        tk.Label(filter_frame, text="选择周:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
+        
+        self.week_filter_var = tk.StringVar(value="全部")
+        self.week_filter_combo = ttk.Combobox(filter_frame, textvariable=self.week_filter_var,
+                                               width=22, state='readonly', font=self.font_entry)
+        self.week_filter_combo.pack(side=tk.LEFT, padx=(0, 15))
+        self.week_filter_combo.bind('<<ComboboxSelected>>',
+                                    lambda e: self.refresh_stats())
+        
         # ── 1. Overview cards ──
         overview_frame = tk.LabelFrame(parent, text="📊 总览",
                                        font=self.font_label, padx=15, pady=12)
-        overview_frame.pack(fill=tk.X, padx=10, pady=(10, 8))
+        overview_frame.pack(fill=tk.X, padx=10, pady=(0, 8))
         
         card_frame = tk.Frame(overview_frame)
         card_frame.pack(fill=tk.X)
@@ -707,15 +720,63 @@ class TodoApp:
                 self.completed_tree.tag_configure(priority, background=color)
     
     # ──────────────────────────────────────────────
-    #  STATISTICS — Visual Charts
+    #  STATISTICS — Table-based, week-aware
     # ──────────────────────────────────────────────
-    # ──────────────────────────────────────────────
-    #  STATISTICS — Table-based
-    # ──────────────────────────────────────────────
+    def _date_to_week(self, date_str):
+        """Parse a date string (YYYY-MM-DD ...) and return (iso_year, iso_week)."""
+        try:
+            d = datetime.strptime(date_str.split()[0], "%Y-%m-%d")
+            iso = d.isocalendar()
+            return (iso[0], iso[1])
+        except (ValueError, IndexError):
+            return None
+
+    def _build_week_options(self):
+        """Build week dropdown options from all task dates."""
+        weeks_set = set()
+        for t in self.data["tasks"]:
+            w = self._date_to_week(t.get("created", ""))
+            if w:
+                weeks_set.add(w)
+        for t in self.data["completed"]:
+            w = self._date_to_week(t.get("completed", ""))
+            if w:
+                weeks_set.add(w)
+        self._all_weeks = sorted(weeks_set, reverse=True)
+        options = ["全部"] + [f"{y}年第{w}周" for y, w in self._all_weeks]
+        self.week_filter_combo['values'] = options
+        if not self.week_filter_var.get() or self.week_filter_var.get() not in options:
+            self.week_filter_var.set(options[0] if options else "全部")
+
+    def _filter_by_week(self, tasks, date_field):
+        """Filter a list of tasks by the currently selected week.
+        Returns filtered list, or original list if selected week is '全部'.
+        """
+        selected = self.week_filter_var.get()
+        if selected == "全部":
+            return tasks
+        import re
+        m = re.match(r"(\d+)年.*?(\d+)周", selected)
+        if not m:
+            return tasks
+        year_filter, week_filter = int(m.group(1)), int(m.group(2))
+        result = []
+        for t in tasks:
+            w = self._date_to_week(t.get(date_field, ""))
+            if w and w[0] == year_filter and w[1] == week_filter:
+                result.append(t)
+        return result
+
     def refresh_stats(self):
-        """Refresh statistics tab data"""
-        total_pending = len(self.data["tasks"])
-        total_completed = len(self.data["completed"])
+        """Refresh statistics tab data, filtered by selected week"""
+        self._build_week_options()
+        
+        # Filter by week
+        filtered_tasks = self._filter_by_week(self.data["tasks"], "created")
+        filtered_completed = self._filter_by_week(self.data["completed"], "completed")
+        
+        total_pending = len(filtered_tasks)
+        total_completed = len(filtered_completed)
         total_all = total_pending + total_completed
         
         self.stat_pending.set(str(total_pending))
@@ -725,8 +786,8 @@ class TodoApp:
         # ── By priority ──
         self.stat_priority_tree.delete(*self.stat_priority_tree.get_children())
         for pri in self.priority_options:
-            p = sum(1 for t in self.data["tasks"] if t.get("priority") == pri)
-            c = sum(1 for t in self.data["completed"] if t.get("priority") == pri)
+            p = sum(1 for t in filtered_tasks if t.get("priority") == pri)
+            c = sum(1 for t in filtered_completed if t.get("priority") == pri)
             total = p + c
             if p > 0 or c > 0:
                 self.stat_priority_tree.insert('', tk.END, values=(pri, p, c, total))
@@ -734,8 +795,8 @@ class TodoApp:
         # ── By category ──
         self.stat_category_tree.delete(*self.stat_category_tree.get_children())
         for cat in self.category_options:
-            p = sum(1 for t in self.data["tasks"] if t.get("category") == cat)
-            c = sum(1 for t in self.data["completed"] if t.get("category") == cat)
+            p = sum(1 for t in filtered_tasks if t.get("category") == cat)
+            c = sum(1 for t in filtered_completed if t.get("category") == cat)
             total = p + c
             if p > 0 or c > 0:
                 self.stat_category_tree.insert('', tk.END, values=(cat, p, c, total))
@@ -743,7 +804,7 @@ class TodoApp:
         # ── By date ──
         self.stat_date_tree.delete(*self.stat_date_tree.get_children())
         date_counts = {}
-        for t in self.data["completed"]:
+        for t in filtered_completed:
             d = t.get("completed", "").split()[0]
             date_counts[d] = date_counts.get(d, 0) + 1
         for date in sorted(date_counts.keys(), reverse=True):
