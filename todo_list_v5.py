@@ -6,14 +6,16 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.3"
+VERSION = "6.4"
 
 import json
 import os
 import sys
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+import openpyxl
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
 
 class TodoApp:
@@ -267,6 +269,10 @@ class TodoApp:
         tk.Button(toolbar, text="🗑 删除全部", command=self.delete_all_completed,
                   bg="#C9302C", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 16))
+
+        tk.Button(toolbar, text="📤 导出 Excel", command=self.export_completed,
+                  bg="#4F81BD", fg="white", font=self.font_button,
+                  cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
         tk.Label(toolbar, text="已完成任务自动保存，关闭后不丢失",
                  font=self.font_label, fg="#888888").pack(side=tk.LEFT, padx=(20, 0))
@@ -542,6 +548,81 @@ class TodoApp:
         self.save_data()
         self.refresh_completed()
         self.refresh_display()
+    
+    def export_completed(self):
+        """Export all completed tasks to Excel file"""
+        if not self.data["completed"]:
+            self.status_bar.config(text="已完成列表为空，无可导出的记录")
+            return
+        
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel 文件", "*.xlsx"), ("所有文件", "*.*")],
+            title="导出已完成任务",
+            initialfile=f"已完成任务_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        )
+        if not file_path:
+            return  # user cancelled
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "已完成任务"
+        
+        # ── Header style ──
+        header_font = Font(name="Microsoft YaHei", bold=True, size=12, color="FFFFFF")
+        header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+        header_align = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin")
+        )
+        
+        # ── Write headers ──
+        headers = ["序号", "任务内容", "任务类别", "任务紧急程度", "责任人", "完成时间", "创建时间"]
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin_border
+        
+        # ── Write data ──
+        data_font = Font(name="Microsoft YaHei", size=11)
+        data_align = Alignment(horizontal="center", vertical="center")
+        content_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
+        for row_idx, task in enumerate(self.data["completed"], 2):
+            values = [
+                row_idx - 1,
+                task.get("text", ""),
+                task.get("category", ""),
+                task.get("priority", ""),
+                self.format_person(task.get("person", "")),
+                task.get("completed", ""),
+                task.get("created", "")
+            ]
+            for col_idx, value in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.font = data_font
+                cell.border = thin_border
+                if col_idx == 2:  # 任务内容 - left align
+                    cell.alignment = content_align
+                else:
+                    cell.alignment = data_align
+        
+        # ── Auto-fit column widths ──
+        col_widths_map = {1: 6, 2: 45, 3: 14, 4: 14, 5: 16, 6: 18, 7: 18}
+        for col_idx, width in col_widths_map.items():
+            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = width
+        
+        # Freeze top row
+        ws.freeze_panes = "A2"
+        
+        try:
+            wb.save(file_path)
+            self.status_bar.config(text=f"✓ 导出成功: {os.path.basename(file_path)} ({len(self.data['completed'])} 条记录)")
+        except Exception as e:
+            messagebox.showerror("导出失败", f"保存文件失败:\n{str(e)}")
     
     def refresh_display(self):
         """Refresh the display"""
