@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.8"
+VERSION = "6.9"
 
 import json
 import os
@@ -56,7 +56,7 @@ class TodoApp:
         }
 
         # Task category options
-        self.category_options = ["每日成长任务", "工作任务"]
+        self.category_options = ["工作任务", "每日任务"]
         
         # Font configurations
         self.font_title = ("Microsoft YaHei", 20, "bold")
