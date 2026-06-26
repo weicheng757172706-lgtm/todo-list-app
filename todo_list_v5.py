@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.7"
+VERSION = "6.8"
 
 import json
 import os
@@ -263,11 +263,11 @@ class TodoApp:
         toolbar.pack(fill=tk.X, pady=(0, 10))
 
         tk.Button(toolbar, text="🗑 删除所选", command=self.delete_completed,
-                  bg="#D9534F", fg="white", font=self.font_button,
+                  bg="#E67E22", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
         tk.Button(toolbar, text="🗑 删除全部", command=self.delete_all_completed,
-                  bg="#C9302C", fg="white", font=self.font_button,
+                  bg="#C0392B", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 16))
 
         tk.Button(toolbar, text="📤 导出 Excel", command=self.export_completed,
