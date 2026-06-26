@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.6"
+VERSION = "6.7"
 
 import json
 import os
@@ -34,7 +34,7 @@ class TodoApp:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("ToDoList（w.c.）")
+        self.root.title("ToDoList")
         self.root.geometry("900x650")
         self.root.minsize(700, 500)
         
@@ -49,7 +49,7 @@ class TodoApp:
         # Priority options (Eisenhower Matrix)
         self.priority_options = ["重要紧急", "重要不紧急", "不重要紧急", "不重要不紧急"]
         self.priority_colors = {
-            "重要紧急": "#FF6B6B",
+            "重要紧急": "#FFCCCC",
             "重要不紧急": "#E5F9F6",
             "不重要紧急": "#FFF9E5",
             "不重要不紧急": "#E5F9E5"
@@ -170,7 +170,7 @@ class TodoApp:
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
 
-        title_label = tk.Label(title_frame, text="ToDoList（w.c.）",
+        title_label = tk.Label(title_frame, text="ToDoList",
                                font=self.font_title,
                                bg="#4F81BD", fg="white")
         title_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
@@ -568,11 +568,13 @@ class TodoApp:
             self.status_bar.config(text="已完成列表为空，无可导出的记录")
             return
         
+        now = datetime.now()
+        iso_year, iso_week, _ = now.isocalendar()
         file_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel 文件", "*.xlsx"), ("所有文件", "*.*")],
             title="导出已完成任务",
-            initialfile=f"已完成任务_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            initialfile=f"{iso_year}年第{iso_week}周 已完成任务列表.xlsx"
         )
         if not file_path:
             return  # user cancelled
@@ -663,11 +665,7 @@ class TodoApp:
                 self.pending_tree.item(item, tags=(priority,))
         
         for priority, color in self.priority_colors.items():
-            if priority == "重要紧急":
-                self.pending_tree.tag_configure(priority, background=color,
-                                                font=("Microsoft YaHei", 12, "bold"))
-            else:
-                self.pending_tree.tag_configure(priority, background=color)
+            self.pending_tree.tag_configure(priority, background=color)
     
     def refresh_completed(self):
         """Refresh completed tasks display"""
@@ -713,11 +711,7 @@ class TodoApp:
                         self.completed_tree.item(item, tags=(priority,))
         
         for priority, color in self.priority_colors.items():
-            if priority == "重要紧急":
-                self.completed_tree.tag_configure(priority, background=color,
-                                                  font=("Microsoft YaHei", 12, "bold"))
-            else:
-                self.completed_tree.tag_configure(priority, background=color)
+            self.completed_tree.tag_configure(priority, background=color)
     
     # ──────────────────────────────────────────────
     #  STATISTICS — Table-based, week-aware
