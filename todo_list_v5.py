@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.4"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.6.22→规范进位V1.8.2，V1.8.3 首版，本版 V1.8.4 修复 daily_summary.txt 摘要不准（路径错配+保存失败仍同步）；列布局方案B/窗口还原锁回900x650等保留
+VERSION = "V1.8.5"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.4 修复 daily_summary 摘要不准；本版 V1.8.5 新增应用图标（窗口标题栏+exe 图标，深蓝圆盾+金色双剑冒险徽章）；列布局方案B/窗口还原锁回900x650等保留
 
 import json
 import os
@@ -179,6 +179,15 @@ class TodoApp:
         self.root.minsize(700, 500)
         self._prev_state = "normal"
         self.root.bind("<Configure>", self._on_resize)
+        
+        # ── 应用图标（V1.8.5）：标题栏左上角显示；exe 文件图标由 PyInstaller --icon 提供 ──
+        try:
+            _icon_base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+            _icon_path = os.path.join(_icon_base, "TodoList_icon.ico")
+            if os.path.exists(_icon_path):
+                self.root.iconbitmap(_icon_path)
+        except Exception:
+            pass
         
         # Data file path - save in same directory as exe
         if getattr(sys, 'frozen', False):
