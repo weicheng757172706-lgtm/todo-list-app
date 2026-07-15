@@ -6,24 +6,67 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "6.9"
+VERSION = "V1.8.3"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.6.22→规范进位V1.8.2，本版V1.8.3；列布局方案B(除冒险描述外列钉死)/窗口还原锁回900x650等保留
 
 import json
 import os
 import sys
-from datetime import datetime
+import re
+import socket
+import shutil
+from datetime import datetime, date, timedelta
+import calendar
+import math
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import tkinter.font as tkFont
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 
+# Pillow（彩色 emoji 图片化，绕过 Tkinter 把 emoji 当单色字形染色的限制）
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageTk
+except Exception:
+    Image = ImageDraw = ImageFont = ImageTk = None
+
+# ── 彩色图标方案回退开关（韦老板 2026-07-08 确认：彩色小图标观感不达标，取消显示）──
+# 强制置空后，所有 _emoji_image 返回 None，各控件经既有 `if ImageTk is None` 守卫
+# 自动回退为 Tk 原生灰色文本 emoji，行为与灰版 V1.6.9_gray 一致。
+Image = ImageDraw = ImageFont = ImageTk = None
+
+# ──────────────────────────────────────────────
+# Single instance lock (prevent multiple instances)
+# ──────────────────────────────────────────────
+LOCK_PORT = 54321  # Arbitrary port for socket-based lock
+
+def is_already_running():
+    """Check if another instance is already running using a socket lock."""
+    global _lock_socket
+    _lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _lock_socket.bind(("127.0.0.1", LOCK_PORT))
+        return False
+    except socket.error:
+        return True
+
+# 智慧奖励映射（V1.6.2：与当前优先级命名保持一致）
+# 红色警报=重要紧急(+20) | 修炼升级=重要不紧急(+20) | 临时密令=不重要紧急(+10) | 佛系摸鱼=不重要不紧急(+5)
+WISDOM_BY_PRIORITY = {
+    "红色警报": 20,
+    "修炼升级": 20,
+    "临时密令": 10,
+    "佛系摸鱼": 5,
+}
 
 class TodoApp:
 
     @staticmethod
     def format_person(person_text):
         """Split multi-person text by common separators, join with ' / ' for display."""
-        if not person_text or not person_text.strip():
+        if not person_text or person_text is None:
+            return ""
+        person_text = str(person_text).strip()
+        if not person_text:
             return ""
         # Normalize: replace various separators with commas
         for sep in ['，', ';', '；', '、', '|', '/']:
@@ -32,11 +75,110 @@ class TodoApp:
         names = [n.strip() for n in person_text.split(',') if n.strip()]
         return ' / '.join(names)
     
+    @staticmethod
+    def validate_task_text(text):
+        """Validate task description.
+        Returns: (is_valid, error_message)
+        """
+        if not text or not text.strip():
+            return False, "任务描述不能为空！"
+        
+        text = text.strip()
+        
+        # Check length
+        if len(text) > 500:
+            return False, "任务描述不能超过500个字符！"
+        
+        # Check for potentially dangerous characters
+        dangerous_chars = ['<', '>', '{', '}', '[', ']', '|', '\\', '`']
+        for char in dangerous_chars:
+            if char in text:
+                return False, f"任务描述不能包含字符: {char}"
+        
+        return True, ""
+    
+    @staticmethod
+    def validate_person_name(person):
+        """Validate person name.
+        Returns: (is_valid, error_message)
+        """
+        if not person or not person.strip():
+            return True, ""  # Person is optional, default to "韦程"
+        
+        person = person.strip()
+        
+        # Check length
+        if len(person) > 100:
+            return False, "冒险者名称不能超过100个字符！"
+        
+        return True, ""
+    
+    @staticmethod
+    def validate_tags(tags_text):
+        """Validate tags text.
+        Returns: (is_valid, error_message, tags_list)
+        """
+        if not tags_text or not tags_text.strip():
+            return True, "", []
+        
+        # Split by comma and validate each tag
+        tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+        
+        # Check number of tags
+        if len(tags) > 20:
+            return False, "标签数量不能超过20个！", []
+        
+        # Check each tag
+        for tag in tags:
+            if len(tag) > 50:
+                return False, f"标签 '{tag}' 不能超过50个字符！", []
+            if not tag.isprintable():
+                return False, f"标签 '{tag}' 包含不可打印字符！", []
+        
+        return True, "", tags
+    
+    @staticmethod
+    def strikethrough(text):
+        """Add strikethrough effect to text using Markdown-style markers."""
+        if not text:
+            return ""
+        return f"~~{text}~~"
+
+    @staticmethod
+    def calculate_duration(created_str, completed_str):
+        """Calculate time difference between created and completed timestamps.
+        Returns formatted string like 'X天X小时X分钟'."""
+        try:
+            created = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
+            completed = datetime.strptime(completed_str, "%Y-%m-%d %H:%M:%S")
+            delta = completed - created
+            
+            total_seconds = int(delta.total_seconds())
+            days = total_seconds // 86400
+            hours = (total_seconds % 86400) // 3600
+            minutes = (total_seconds % 3600) // 60
+            
+            parts = []
+            if days > 0:
+                parts.append(f"{days}天")
+            if hours > 0:
+                parts.append(f"{hours}小时")
+            if minutes > 0 or len(parts) == 0:
+                parts.append(f"{minutes}分钟")
+            
+            return "".join(parts)
+        except (ValueError, TypeError):
+            return "未知"
+    
     def __init__(self, root):
         self.root = root
-        self.root.title("ToDoList")
-        self.root.geometry("900x650")
+        self.root.title(f"冒险者的游戏 {VERSION}")
+        # ── 主窗口尺寸：首开与「从最大化还原」共用唯一基准（V1.6.18）──
+        self.window_home = "900x650"  # 首开小窗口尺寸；从最大化还原须锁回此尺寸
+        self.root.geometry(self.window_home)
         self.root.minsize(700, 500)
+        self._prev_state = "normal"
+        self.root.bind("<Configure>", self._on_resize)
         
         # Data file path - save in same directory as exe
         if getattr(sys, 'frozen', False):
@@ -46,17 +188,20 @@ class TodoApp:
         
         self.data_file = os.path.join(base_path, "todo_data.json")
         
-        # Priority options (Eisenhower Matrix)
-        self.priority_options = ["重要紧急", "重要不紧急", "不重要紧急", "不重要不紧急"]
+        # Priority options (Eisenhower Matrix - gamified v7.9)
+        self.priority_options = ["红色警报", "修炼升级", "临时密令", "佛系摸鱼"]
         self.priority_colors = {
-            "重要紧急": "#FFCCCC",
-            "重要不紧急": "#E5F9F6",
-            "不重要紧急": "#FFF9E5",
-            "不重要不紧急": "#E5F9E5"
+            "红色警报": "#FFCCCC",
+            "修炼升级": "#FFF2CC",
+            "临时密令": "#D9EAD3",
+            "佛系摸鱼": "#C9DAF8"
         }
 
         # Task category options
-        self.category_options = ["工作任务", "每日任务"]
+        self.category_options = ["主线任务", "营地修行"]
+        
+        # Tag options (predefined tags for quick selection)
+        self.predefined_tags = ["紧急", "重要", "待讨论", "进行中", "阻塞", "待审核"]
         
         # Font configurations
         self.font_title = ("Microsoft YaHei", 20, "bold")
@@ -69,6 +214,28 @@ class TodoApp:
         # Load data
         self.data = self.load_data()
         
+        # Timer variables (compact timer in pending tab)
+        self.timer_running = False
+        self.timer_paused = False
+        self.timer_seconds = 25 * 60  # Default: 25 minutes
+        self.timer_default_seconds = 25 * 60
+        self.timer_after_id = None
+        self.timer_display_var = tk.StringVar(value="⏰ 25:00")
+        
+        # Sorting criteria
+        self.sort_criteria = tk.StringVar(value="默认顺序")
+        
+        # Search query
+        self.search_query = tk.StringVar()
+        self.search_query.trace_add('write', lambda *args: self.refresh_display())
+        
+        # Game data (冒险者游戏系统)
+        self.game_data = self.load_game_data()
+        
+        # Animation variables
+        self.animation_label = None
+        self.animation_after_id = None
+        
         # Setup GUI
         self.setup_gui()
         
@@ -76,7 +243,7 @@ class TodoApp:
         self.refresh_display()
     
     def load_data(self):
-        """Load data from JSON file"""
+        """Load data from JSON file with backup recovery"""
         if os.path.exists(self.data_file):
             try:
                 with open(self.data_file, 'r', encoding='utf-8') as f:
@@ -85,20 +252,907 @@ class TodoApp:
                         data["tasks"] = []
                     if "completed" not in data:
                         data["completed"] = []
+
+                    # 迁移旧版分类名称（v9.0 改为冒险主题风格）
+                    category_map = {
+                        "工作任务": "主线任务",
+                        "每日任务": "营地修行",
+                        "重要冒险": "主线任务",
+                        "每日修行": "营地修行",
+                        "搬砖任务": "主线任务"
+                    }
+                    # 迁移旧版优先级名称（v8.8 改为新版本）
+                    priority_map = {
+                        "重要紧急": "红色警报",
+                        "重要不紧急": "修炼升级",
+                        "不重要紧急": "临时密令",
+                        "不重要不紧急": "佛系摸鱼",
+                        "紧急Boss战": "红色警报",
+                        "主线任务": "修炼升级",
+                        "突发委托": "临时密令",
+                        "摸鱼任务": "佛系摸鱼",
+                        "游击战": "佛系摸鱼"
+                    }
+                    migrated = False
+                    for task in data["tasks"]:
+                        old_cat = task.get("category", "")
+                        if old_cat in category_map:
+                            task["category"] = category_map[old_cat]
+                            migrated = True
+                        old_pri = task.get("priority", "")
+                        if old_pri in priority_map:
+                            task["priority"] = priority_map[old_pri]
+                            migrated = True
+                    for task in data["completed"]:
+                        old_cat = task.get("category", "")
+                        if old_cat in category_map:
+                            task["category"] = category_map[old_cat]
+                            migrated = True
+                        old_pri = task.get("priority", "")
+                        if old_pri in priority_map:
+                            task["priority"] = priority_map[old_pri]
+                            migrated = True
+                    
+                    # 迁移 tags 字段（v10.11 新增标签功能）
+                    tags_migrated = False
+                    for task in data["tasks"]:
+                        if "tags" not in task:
+                            task["tags"] = []
+                            tags_migrated = True
+                    for task in data["completed"]:
+                        if "tags" not in task:
+                            task["tags"] = []
+                            tags_migrated = True
+                    if tags_migrated:
+                        # 静默保存迁移后的数据
+                        try:
+                            if os.path.exists(self.data_file):
+                                shutil.copy2(self.data_file, self.data_file + '.bak')
+                            with open(self.data_file, 'w', encoding='utf-8') as f:
+                                json.dump(data, f, ensure_ascii=False, indent=2)
+                        except Exception:
+                            pass
+                    
+                    # 迁移 subtasks 字段（v10.19 新增支线任务功能）
+                    subtasks_migrated = False
+                    for task in data["tasks"]:
+                        if "subtasks" not in task:
+                            task["subtasks"] = []
+                            subtasks_migrated = True
+                    for task in data["completed"]:
+                        if "subtasks" not in task:
+                            task["subtasks"] = []
+                            subtasks_migrated = True
+                    if subtasks_migrated:
+                        # 静默保存迁移后的数据
+                        try:
+                            if os.path.exists(self.data_file):
+                                shutil.copy2(self.data_file, self.data_file + '.bak')
+                            with open(self.data_file, 'w', encoding='utf-8') as f:
+                                json.dump(data, f, ensure_ascii=False, indent=2)
+                        except Exception:
+                            pass
+                    
+                    # 回补 wisdom_gain（V1.6.1 之前完成的任务未记录该字段，
+                    # 会导致删除/恢复时已通关任务无法正确扣回本周智慧）— V1.6.2
+                    for task in data["completed"]:
+                        if "wisdom_gain" not in task:
+                            task["wisdom_gain"] = WISDOM_BY_PRIORITY.get(task.get("priority", ""), 5)
+
+                    if migrated or tags_migrated or subtasks_migrated:
+                        # 静默保存迁移后的数据，不弹窗
+                        try:
+                            if os.path.exists(self.data_file):
+                                shutil.copy2(self.data_file, self.data_file + '.bak')
+                            with open(self.data_file, 'w', encoding='utf-8') as f:
+                                json.dump(data, f, ensure_ascii=False, indent=2)
+                        except Exception:
+                            pass
+
                     return data
             except Exception as e:
                 print(f"Error loading data: {e}")
+                # Try to recover from backup
+                backup_file = self.data_file + '.bak'
+                if os.path.exists(backup_file):
+                    try:
+                        with open(backup_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            messagebox.showwarning("数据恢复", 
+                                f"主数据文件损坏，已从备份恢复。\n错误: {str(e)}")
+                            return data
+                    except Exception as be:
+                        print(f"Backup also corrupted: {be}")
                 messagebox.showerror("错误", f"加载数据失败:\n{str(e)}\n将创建新的数据文件。")
         return {"tasks": [], "completed": []}
     
-    def save_data(self):
-        """Save data to JSON file"""
+    def load_game_data(self):
+        """Load game data (level, exp, achievements, attributes)."""
+        # Game data is stored in the main data file under "game" key
+        game_file = self.data_file.replace("todo_data.json", "game_data.json")
+
+        # 当前周一（用于跨周判定与初始化）— V1.6.2 提到函数顶部，确保无文件分支也能正确初始化
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())  # 本周一
+        monday_str = monday.isoformat()
+
+        # Default game data - V1.6.0：每周智慧系统
+        default_game_data = {
+            # 历史总智慧（保留，用于统计）
+            "total_wisdom": 0,
+
+            # 每周智慧系统
+            "weekly_wisdom": 0,  # 本周获得的智慧
+            "weekly_level": 1,  # 本周等级（1-6）
+            "week_start_date": monday_str,  # 本周开始日期（周一的日期），默认初始化为当前周一
+            "weekly_history": [],  # 历史周报记录
+
+            # 成就系统
+            "achievements": [],
+
+            # 统计信息
+            "stats": {
+                "total_completed": 0,
+                "total_added": 0,
+                "current_streak": 0,
+                "longest_streak": 0
+            }
+        }
+
+        if os.path.exists(game_file):
+            try:
+                with open(game_file, 'r', encoding='utf-8') as f:
+                    game_data = json.load(f)
+
+                    # ── 数据迁移（V1.6.0：从旧版本升级）──
+                    if "exp" in game_data:  # 旧版本标志：存在 exp 即需迁移（不依赖 total_wisdom 是否缺失）
+                        # 将旧的 exp 迁移到 total_wisdom
+                        game_data["total_wisdom"] = game_data.get("exp", 0)
+
+                        # 移除旧字段
+                        old_keys = ["exp", "exp_to_next_level", "gold", "daily_exp", "daily_gold", "last_daily_date", "attributes"]
+                        for old_key in old_keys:
+                            if old_key in game_data:
+                                del game_data[old_key]
+
+                    # Ensure all fields exist
+                    for key in default_game_data:
+                        if key not in game_data:
+                            game_data[key] = default_game_data[key]
+
+                    # ── 检查是否需要重置每周统计 ──
+                    if game_data.get("week_start_date") != monday_str:
+                        # 跨周了，需要重置
+
+                        # 保存上周数据到历史记录
+                        if game_data.get("weekly_wisdom", 0) > 0:
+                            # 计算上周的等级和称号
+                            last_week_wisdom = game_data["weekly_wisdom"]
+                            last_week_level = game_data["weekly_level"]
+                            last_week_title = self.get_wisdom_title(last_week_level)
+
+                            # 添加到历史记录
+                            game_data["weekly_history"].append({
+                                "week": game_data.get("week_start_date", ""),
+                                "wisdom": last_week_wisdom,
+                                "level": last_week_level,
+                                "title": last_week_title
+                            })
+
+                        # 重置本周数据
+                        game_data["weekly_wisdom"] = 0
+                        game_data["weekly_level"] = 1
+                        game_data["week_start_date"] = monday_str
+
+                    return game_data
+            except Exception as e:
+                print(f"Error loading game data: {e}")
+        
+        return default_game_data
+    
+    def save_game_data(self):
+        """Save game data to file."""
         try:
+            game_file = self.data_file.replace("todo_data.json", "game_data.json")
+            with open(game_file, 'w', encoding='utf-8') as f:
+                json.dump(self.game_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving game data: {e}")
+    
+    @staticmethod
+    def get_wisdom_title(level):
+        """Calculate wisdom title based on LEVEL (V1.6.0：每周智慧系统)."""
+        if level == 1:
+            return "菜鸟路人"
+        elif level == 2:
+            return "见习旅者"
+        elif level == 3:
+            return "荒野智者"
+        elif level == 4:
+            return "探险泰斗"
+        elif level == 5:
+            return "传奇冒险家"
+        else:  # level >= 6
+            return "至尊冒险王"
+    
+    @staticmethod
+    def get_wisdom_for_level(level):
+        """Return wisdom needed for each level (V1.6.0)."""
+        wisdom_thresholds = {
+            1: (0, 60),      # LV1: 0~60
+            2: (61, 200),    # LV2: 61~200
+            3: (201, 300),   # LV3: 201~300
+            4: (301, 400),   # LV4: 301~400
+            5: (401, 500),   # LV5: 401~500
+            6: (501, 999999) # LV6: 501~♾️
+        }
+        return wisdom_thresholds.get(level, (0, 999999))
+    
+    @staticmethod
+    def get_level_from_wisdom(wisdom):
+        """Calculate level from wisdom points (V1.6.0)."""
+        if wisdom <= 60:
+            return 1
+        elif wisdom <= 200:
+            return 2
+        elif wisdom <= 300:
+            return 3
+        elif wisdom <= 400:
+            return 4
+        elif wisdom <= 500:
+            return 5
+        else:
+            return 6
+    
+    def _check_wisdom_level_up(self):
+        """Check and process level up (V1.6.0)."""
+        current_wisdom = self.game_data["weekly_wisdom"]
+        current_level = self.game_data["weekly_level"]
+        
+        new_level = self.get_level_from_wisdom(current_wisdom)
+        
+        if new_level > current_level:
+            # Level up!
+            self.game_data["weekly_level"] = new_level
+            self.show_level_up_animation()
+        elif new_level < current_level:
+            # Level down (should not happen, but for safety)
+            self.game_data["weekly_level"] = new_level
+    
+    def add_wisdom(self, amount):
+        """Add wisdom points (V1.6.0：每周智慧系统)."""
+        self.game_data["weekly_wisdom"] += amount
+        self.game_data["total_wisdom"] += amount
+        
+        # Check for level up
+        self._check_wisdom_level_up()
+        
+        self.save_game_data()
+        self.update_game_display()
+    
+    def subtract_wisdom(self, total_amount, weekly_amount):
+        """Deduct wisdom points (V1.6.1：删除/恢复任务同步扣回).
+        total_amount 始终扣回历史总智慧；weekly_amount 仅当任务属本周时>0。"""
+        self.apply_wisdom_change(self.game_data, -total_amount, -weekly_amount)
+        self.save_game_data()
+        self.update_game_display()
+    
+    @staticmethod
+    def apply_wisdom_change(game_data, total_delta, weekly_delta):
+        """Apply a wisdom change to game_data (no save/refresh).
+        Deltas may be negative for deduction; clamped at 0."""
+        game_data["total_wisdom"] = max(0, game_data["total_wisdom"] + total_delta)
+        game_data["weekly_wisdom"] = max(0, game_data["weekly_wisdom"] + weekly_delta)
+        game_data["weekly_level"] = TodoApp.get_level_from_wisdom(game_data["weekly_wisdom"])
+    
+    @staticmethod
+    def is_task_this_week(completed_str, week_start_date):
+        """Return True if task completed at `completed_str` belongs to the week of `week_start_date`."""
+        if not completed_str or not week_start_date:
+            return False
+        try:
+            from datetime import datetime, date, timedelta
+            cd = datetime.strptime(completed_str, "%Y-%m-%d %H:%M:%S")
+            cm = (cd - timedelta(days=cd.weekday())).strftime("%Y-%m-%d")
+            return cm == week_start_date
+        except Exception:
+            return False
+    
+    # ──────────────────────────────────────────────
+    # 彩色 emoji 图片化（方案A：绕过 Tkinter 单色字形渲染）
+    # ──────────────────────────────────────────────
+    EMOJI_CHARS = (
+        '⚔️','🏆','🏁','⚡','🗺️','🏷️','📝','📊','📅','🚀','🎉',
+        '✏️','🗑️','🗑','⚠️','⏱️','⏰','🔢','☑️','☐','🧠','⭐','👑','🎯','🎮','♾️',
+        '✅','🔄',
+    )
+
+    def _find_emoji_font(self):
+        for p in (r"C:/Windows/Fonts/seguiemj.ttf",
+                  r"C:/Windows/Fonts/NotoColorEmoji.ttf"):
+            if os.path.exists(p):
+                return p
+        return None
+
+    def _emoji_font_for(self, size):
+        if Image is None or self._emoji_font_path is None:
+            return None
+        if size not in self._emoji_fonts:
+            try:
+                self._emoji_fonts[size] = ImageFont.truetype(self._emoji_font_path, size)
+            except Exception:
+                self._emoji_fonts[size] = None
+        return self._emoji_fonts[size]
+
+    def _emoji_image(self, char, size=18):
+        """渲染单个 emoji 为彩色 PhotoImage（带透明边、按 size 缩放、缓存）。
+
+        采用 4 倍超采样渲染后再 LANCZOS 缩回目标尺寸，避免小尺寸下发虚/发糊。
+        渲染成本只在首次调用时发生并缓存，无运行时开销。
+        """
+        if ImageTk is None:
+            return None
+        key = (char, size)
+        if key in self._emoji_cache:
+            return self._emoji_cache[key]
+        img = None
+        SS = 4  # 超采样倍率：越大越锐利（仅影响启动渲染）
+        font = self._emoji_font_for(size * SS)
+        if font is not None:
+            try:
+                pad = max(2, size // 4)
+                canvas = Image.new("RGBA",
+                                   (size * SS + pad * 2, size * SS + pad * 2),
+                                   (0, 0, 0, 0))
+                d = ImageDraw.Draw(canvas)
+                d.text((pad, pad), char, font=font, embedded_color=True)
+                bbox = canvas.getbbox()
+                if bbox:
+                    canvas = canvas.crop(bbox)
+                w, h = canvas.size
+                if h > 0:
+                    scale = size / float(h)
+                    canvas = canvas.resize((max(1, int(w * scale)), max(1, int(h * scale))),
+                                           Image.LANCZOS)
+                img = ImageTk.PhotoImage(canvas)
+            except Exception:
+                img = None
+        self._emoji_cache[key] = img
+        return img
+
+    @staticmethod
+    def _split_leading_emoji(s):
+        if not s:
+            return None, s
+        for e in TodoApp.EMOJI_CHARS:
+            if s.startswith(e):
+                rest = s[len(e):]
+                if rest.startswith(' '):
+                    rest = rest[1:]
+                return e, rest
+        return None, s
+
+    @staticmethod
+    def _label_font_size(widget):
+        try:
+            f = widget.cget("font")
+        except Exception:
+            return 16
+        if isinstance(f, (tuple, list)) and len(f) >= 2:
+            try:
+                return int(f[1])
+            except Exception:
+                return 16
+        if hasattr(f, "cget"):
+            try:
+                return int(f.cget("size"))
+            except Exception:
+                return 16
+        if isinstance(f, str):
+            for p in f.split():
+                if p.isdigit():
+                    return int(p)
+        return 16
+
+    def _apply_emoji_images(self, widget):
+        """递归把含 emoji 的 Label/Button/Notebook/Tab/Treeview表头/LabelFrame 转为彩色图片。"""
+        try:
+            for child in widget.winfo_children():
+                self._apply_emoji_images(child)
+        except Exception:
+            pass
+        try:
+            cls = widget.winfo_class()
+        except Exception:
+            return
+        try:
+            if cls in ("Label", "TLabel", "Button", "TButton"):
+                txt = widget.cget("text")
+                if txt:
+                    emo, rest = self._split_leading_emoji(txt)
+                    if emo:
+                        img = self._emoji_image(emo, self._label_font_size(widget))
+                        if img is not None:
+                            widget.configure(image=img, compound=tk.LEFT, text=rest)
+                            widget.image = img
+            elif cls in ("Notebook", "TNotebook"):
+                for i in range(widget.index("end")):
+                    tabid = widget.tabs()[i]
+                    txt = widget.tab(tabid, "text")
+                    emo, rest = self._split_leading_emoji(txt)
+                    if emo:
+                        img = self._emoji_image(emo, 15)
+                        if img is not None:
+                            widget.tab(tabid, text=rest, image=img, compound=tk.LEFT)
+            elif cls in ("Treeview", "TTreeview"):
+                for col in widget["columns"]:
+                    htxt = widget.heading(col, "text")
+                    base = htxt if htxt else col
+                    emo, rest = self._split_leading_emoji(base)
+                    if emo:
+                        img = self._emoji_image(emo, 14)
+                        if img is not None:
+                            widget.heading(col, text=rest, image=img)
+            elif cls in ("LabelFrame", "TLabelFrame"):
+                txt = widget.cget("text")
+                if txt:
+                    emo, rest = self._split_leading_emoji(txt)
+                    if emo and ImageTk is not None:
+                        img = self._emoji_image(emo, self._label_font_size(widget) or 12)
+                        if img is not None:
+                            try:
+                                lbl = ttk.Label(widget, image=img, text=rest, compound=tk.LEFT)
+                                lbl.image = img
+                                widget.configure(labelwidget=lbl, text="")
+                            except Exception:
+                                widget.configure(text=rest if rest else "")
+        except Exception:
+            pass
+
+    def _set_emoji_text(self, widget, msg):
+        """动态更新含 emoji 的文本（保持彩色图片）。"""
+        emo, rest = self._split_leading_emoji(msg)
+        if emo and ImageTk is not None:
+            img = self._emoji_image(emo, self._label_font_size(widget))
+            if img is not None:
+                widget.configure(image=img, compound=tk.LEFT, text=rest)
+                widget.image = img
+                return
+        try:
+            widget.configure(image="", compound=tk.NONE, text=msg)
+        except Exception:
+            widget.configure(text=msg)
+
+    def set_status(self, msg):
+        """状态栏：左侧彩色图标 + 右侧文本。"""
+        emo, rest = self._split_leading_emoji(msg)
+        if emo and ImageTk is not None:
+            img = self._emoji_image(emo, 14)
+            if img is not None:
+                self.status_icon.configure(image=img)
+                self.status_icon.image = img
+                self.status_text.configure(text=rest)
+                return
+        self.status_icon.configure(image="")
+        self.status_text.configure(text=msg)
+
+    def check_achievements(self, task):
+        """Check and unlock achievements based on task completion."""
+        achievements = self.game_data["achievements"]
+        stats = self.game_data["stats"]
+        
+        # Achievement: First completion
+        if "first_completion" not in achievements and stats["total_completed"] == 1:
+            achievements.append("first_completion")
+            self.show_achievement_animation("🎉 初次冒险！", "完成第一个冒险")
+        
+        # Achievement: Complete 10 tasks
+        if "complete_10" not in achievements and stats["total_completed"] == 10:
+            achievements.append("complete_10")
+            self.show_achievement_animation("🏆 初出茅庐", "完成10个冒险")
+        
+        # Achievement: Complete 50 tasks
+        if "complete_50" not in achievements and stats["total_completed"] == 50:
+            achievements.append("complete_50")
+            self.show_achievement_animation("⭐ 冒险老手", "完成50个冒险")
+        
+        # Achievement: Complete 100 tasks
+        if "complete_100" not in achievements and stats["total_completed"] == 100:
+            achievements.append("complete_100")
+            self.show_achievement_animation("👑 传奇冒险家", "完成100个冒险")
+        
+        self.save_game_data()
+    
+    def show_wisdom_animation(self, amount):
+        """Show wisdom gain animation (V1.6.0)."""
+        if self.animation_label:
+            self.animation_label.destroy()
+        
+        self.animation_label = tk.Label(
+            self.root,
+            text=f"🧠 智慧 +{amount} 🧠",
+            font=("Microsoft YaHei", 24, "bold"),
+            fg="#9B59B6",
+            bg="#2B2B2B"
+        )
+        self.animation_label.place(relx=0.5, rely=0.3, anchor=tk.CENTER)
+        self._apply_emoji_images(self.animation_label)
+        
+        # Animate: fade out and move up
+        self._animate_exp(0)
+    
+    def _animate_exp(self, step):
+        """Animate exp label (fade out and move up)."""
+        if not self.animation_label:
+            return
+        
+        if step >= 30:
+            self.animation_label.destroy()
+            self.animation_label = None
+            return
+        
+        # Move up
+        current_y = self.animation_label.winfo_y()
+        self.animation_label.place(y=current_y - 3)
+        
+        # Fade effect (simulate by changing foreground color)
+        alpha = int(255 * (1 - step / 30))
+        color = f"#{alpha:02X}{alpha:02X}00"
+        try:
+            self.animation_label.config(fg=color)
+        except:
+            pass
+        
+        self.animation_after_id = self.root.after(30, lambda: self._animate_exp(step + 1))
+    
+    def show_level_up_animation(self):
+        """Show level up animation (V1.6.0：每周智慧系统)."""
+        level_up_window = tk.Toplevel(self.root)
+        level_up_window.title("🎉 等级提升！")
+        level_up_window.geometry("320x220")
+        level_up_window.transient(self.root)
+        level_up_window.grab_set()
+        
+        # Center the window
+        level_up_window.update_idletasks()
+        x = (level_up_window.winfo_screenwidth() // 2) - (320 // 2)
+        y = (level_up_window.winfo_screenheight() // 2) - (220 // 2)
+        level_up_window.geometry(f"320x220+{x}+{y}")
+        
+        level = self.game_data.get('weekly_level', 1)
+        title = self.get_wisdom_title(level)
+        wisdom = self.game_data.get('weekly_wisdom', 0)
+        
+        tk.Label(level_up_window, text="🎉", font=("Microsoft YaHei", 48)).pack(pady=15)
+        tk.Label(level_up_window, text=f"等级提升！", font=("Microsoft YaHei", 16, "bold")).pack()
+        tk.Label(level_up_window, text=f"{title} | Lv.{level}", font=("Microsoft YaHei", 14, "bold"), fg="#F1C40F").pack(pady=8)
+        tk.Label(level_up_window, text=f"本周智慧: {wisdom}", font=("Microsoft YaHei", 12)).pack()
+        
+        tk.Button(level_up_window, text="继续冒险！", command=level_up_window.destroy,
+                 font=("Microsoft YaHei", 12), bg="#4F81BD", fg="white").pack(pady=15)
+        self._apply_emoji_images(level_up_window)
+    
+    def show_achievement_animation(self, title, description):
+        """Show achievement unlock animation."""
+        achievement_window = tk.Toplevel(self.root)
+        achievement_window.title("🏆 成就解锁！")
+        achievement_window.geometry("350x180")
+        achievement_window.transient(self.root)
+        
+        # Center the window
+        achievement_window.update_idletasks()
+        x = (achievement_window.winfo_screenwidth() // 2) - (350 // 2)
+        y = (achievement_window.winfo_screenheight() // 2) - (180 // 2)
+        achievement_window.geometry(f"350x180+{x}+{y}")
+        
+        tk.Label(achievement_window, text="🏆", font=("Microsoft YaHei", 36)).pack(pady=15)
+        tk.Label(achievement_window, text=f"成就解锁！", font=("Microsoft YaHei", 14, "bold")).pack()
+        tk.Label(achievement_window, text=title, font=("Microsoft YaHei", 12, "bold"), fg="#FFD700").pack(pady=5)
+        tk.Label(achievement_window, text=description, font=("Microsoft YaHei", 10)).pack()
+        
+        tk.Button(achievement_window, text="太棒了！", command=achievement_window.destroy,
+                 font=("Microsoft YaHei", 10), bg="#4F81BD", fg="white").pack(pady=15)
+        self._apply_emoji_images(achievement_window)
+    
+    def show_new_task_animation(self):
+        """Show new task added animation."""
+        if self.animation_label:
+            self.animation_label.destroy()
+        
+        self.animation_label = tk.Label(
+            self.root,
+            text="🎯 新冒险已生成！",
+            font=("Microsoft YaHei", 20, "bold"),
+            fg="#00AA00",
+            bg="#F0F0F0"
+        )
+        self.animation_label.place(relx=0.5, rely=0.4, anchor=tk.CENTER)
+        self._apply_emoji_images(self.animation_label)
+        
+        # Animate: fade out
+        self._animate_new_task(0)
+    
+    def _animate_new_task(self, step):
+        """Animate new task label (fade out)."""
+        if not self.animation_label:
+            return
+        
+        if step >= 25:
+            self.animation_label.destroy()
+            self.animation_label = None
+            return
+        
+        # Fade effect
+        alpha = int(255 * (1 - step / 25))
+        color = f"#00{alpha:02X}00"
+        try:
+            self.animation_label.config(fg=color)
+        except:
+            pass
+        
+        self.animation_after_id = self.root.after(30, lambda: self._animate_new_task(step + 1))
+    
+    def show_fireworks_animation(self):
+        """Show fireworks animation using Canvas particles (方案B：小Canvas在中央)."""
+        # 创建一个小的Canvas，显示在窗口中央，不遮挡界面
+        canvas_width = 300
+        canvas_height = 200
+        
+        canvas = tk.Canvas(self.root, 
+                           width=canvas_width, 
+                           height=canvas_height,
+                           highlightthickness=0,
+                           borderwidth=0)
+        
+        # 设置背景色为窗口的背景色（看起来像透明）
+        canvas.configure(bg=self.root.cget('bg'))
+        
+        # 显示在窗口中央
+        canvas.place(relx=0.5, rely=0.5, 
+                     anchor=tk.CENTER,
+                     width=canvas_width, 
+                     height=canvas_height)
+        
+        # 烟花中心位置（Canvas中心）
+        center_x = canvas_width // 2
+        center_y = canvas_height // 2
+        
+        # Particle colors (bright colors for fireworks)
+        colors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", 
+                  "#00FFFF", "#FF8800", "#88FF00", "#FF0088", "#0088FF"]
+        
+        # Create particles
+        particles = []
+        num_particles = 40
+        
+        import math
+        import random
+        
+        for i in range(num_particles):
+            # Random angle and speed
+            angle = (2 * math.pi * i) / num_particles + random.uniform(-0.3, 0.3)
+            speed = random.uniform(3, 7)
+            
+            # Initial position (center)
+            x = center_x
+            y = center_y
+            
+            # Velocity
+            vx = math.cos(angle) * speed
+            vy = math.sin(angle) * speed
+            
+            # Random color
+            color = random.choice(colors)
+            
+            # Create oval (particle)
+            size = random.randint(4, 8)
+            particle = canvas.create_oval(
+                x - size, y - size,
+                x + size, y + size,
+                fill=color, outline=color
+            )
+            
+            # Store particle data
+            particles.append({
+                'id': particle,
+                'x': x,
+                'y': y,
+                'vx': vx,
+                'vy': vy,
+                'life': 50,  # Particle life (frames)
+                'max_life': 50,
+                'size': size
+            })
+        
+        # Add celebration text
+        text_id = canvas.create_text(
+            center_x, center_y - 40,
+            text="🎉 恭喜您冒险已完成！！！",
+            font=("Microsoft YaHei", 16, "bold"),
+            fill="#000000"
+        )
+        
+        # Animate particles
+        self._animate_fireworks(canvas, particles, text_id, 0)
+    
+    def _animate_fireworks(self, canvas, particles, text_id, step):
+        """Animate fireworks particles."""
+        import math
+        
+        if step >= 50:  # Animation ends after 50 frames (~1.5 seconds)
+            canvas.destroy()
+            return
+        
+        # Update particles
+        for p in particles:
+            if p['life'] <= 0:
+                continue
+            
+            # Apply gravity
+            p['vy'] += 0.15
+            
+            # Update position
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            
+            # Decrease life
+            p['life'] -= 1
+            
+            # Update Canvas
+            try:
+                # Move particle
+                canvas.coords(
+                    p['id'],
+                    p['x'] - p['size'], p['y'] - p['size'],
+                    p['x'] + p['size'], p['y'] + p['size']
+                )
+                
+                # Fade effect (change color alpha)
+                alpha = p['life'] / p['max_life']
+                if alpha > 0:
+                    # Make particle smaller as it fades
+                    new_size = int(p['size'] * alpha)
+                    canvas.coords(
+                        p['id'],
+                        p['x'] - new_size, p['y'] - new_size,
+                        p['x'] + new_size, p['y'] + new_size
+                    )
+            except:
+                pass
+        
+        # Fade out text in the last 20 frames
+        if step > 30:
+            try:
+                alpha = int(255 * (1 - (step - 30) / 20))
+                # Note: Canvas text doesn't support alpha easily, so we just keep it visible
+            except:
+                pass
+        
+        # Continue animation
+        self.root.after(30, lambda: self._animate_fireworks(canvas, particles, text_id, step + 1))
+    
+    def update_game_display(self):
+        """Update growth system panels in stats tab (V1.6.0：每周智慧系统)."""
+        try:
+            # 更新本周智慧面板
+            weekly_wisdom = self.game_data.get('weekly_wisdom', 0)
+            weekly_level = self.game_data.get('weekly_level', 1)
+            week_start_date = self.game_data.get('week_start_date', '')
+            
+            # 称号由等级决定
+            wisdom_title = self.get_wisdom_title(weekly_level)
+            
+            # 进度由当前智慧和下一级所需智慧决定
+            min_wisdom, max_wisdom = self.get_wisdom_for_level(weekly_level)
+            if weekly_level >= 6:
+                # 已满级
+                wisdom_progress = 1.0
+                next_title = "已满级"
+                next_level = 6
+            else:
+                wisdom_progress = (weekly_wisdom - min_wisdom) / (max_wisdom - min_wisdom) if max_wisdom > min_wisdom else 0.0
+                next_level = weekly_level + 1
+                next_title = self.get_wisdom_title(next_level)
+            
+            if hasattr(self, 'exp_rank_label'):
+                self.exp_rank_label.config(text=f"{wisdom_title} | Lv.{weekly_level}")
+            if hasattr(self, 'exp_daily_label'):
+                # 显示本周剩余天数
+                from datetime import date, timedelta
+                today = date.today()
+                monday = today - timedelta(days=today.weekday())
+                days_passed = (today - monday).days + 1
+                days_left = 7 - days_passed
+                self._set_emoji_text(self.exp_daily_label, f"📅 本周第{days_passed}天，剩余{days_left}天")
+            if hasattr(self, 'exp_detail_label'):
+                if weekly_level >= 6:
+                    self.exp_detail_label.config(text=f"{weekly_wisdom} 智慧 (已满级)")
+                else:
+                    self.exp_detail_label.config(text=f"{weekly_wisdom}/{max_wisdom} 智慧 → {next_title} (Lv.{next_level})")
+            if hasattr(self, 'exp_progress_canvas'):
+                self._draw_progress_bar(self.exp_progress_canvas, wisdom_progress, "#F1C40F")
+            
+            # 金币面板已移除（V1.6.0）
+                    
+        except Exception as e:
+            print(f"Error updating game display: {e}")
+    
+    def _draw_progress_bar(self, canvas, progress, color):
+        """在Canvas上绘制进度条"""
+        try:
+            canvas.delete("all")
+            w = canvas.winfo_width()
+            h = canvas.winfo_height()
+            if w <= 1:
+                w = 320
+            if h <= 1:
+                h = 24
+            
+            # 背景
+            canvas.create_rectangle(0, 0, w, h, fill="#34495E" if color == "#F1C40F" else "#1B4F72", outline="")
+            
+            # 进度
+            pw = int(w * max(0.0, min(1.0, progress)))
+            if pw > 0:
+                canvas.create_rectangle(0, 0, pw, h, fill=color, outline="")
+            
+            # 百分比文字
+            pct = int(progress * 100)
+            canvas.create_text(w // 2, h // 2, text=f"{pct}%", fill="white", font=("Microsoft YaHei", 10, "bold"))
+        except:
+            pass
+    
+    def save_data(self):
+        """Save data to JSON file with backup"""
+        try:
+            # Create backup before saving
+            if os.path.exists(self.data_file):
+                backup_file = self.data_file + '.bak'
+                shutil.copy2(self.data_file, backup_file)
+            
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"Error saving data: {e}")
             messagebox.showerror("错误", f"保存数据失败:\n{str(e)}")
+        
+        # 同步「今日已完成 + 进行中」到 daily_summary.txt（省 token 快速汇报用），失败不影响主保存
+        self.sync_daily_summary()
+    
+    def sync_daily_summary(self):
+        """将「今日已完成 + 进行中」同步写入 daily_summary.txt（UTF-8 无 BOM），供快速汇报省 token。
+        在 save_data 末尾自动调用；只写不读，异常仅打印不影响主程序。
+        今日已完成 = completed 字段日期为今天的任务（含其下已完成支线）；
+        进行中 = 当前 pending 任务（含其下未完成支线）。"""
+        try:
+            summary_path = os.path.join(os.path.expanduser('~'), 'Documents',
+                                        'TodoList_App', 'daily_summary.txt')
+            today = datetime.now().strftime('%Y-%m-%d')
+
+            done_lines = []
+            for t in self.data.get('completed', []):
+                if t.get('completed', '')[:10] == today:
+                    done_lines.append(f" - {t.get('text', '')}")
+                    for st in t.get('subtasks', []):
+                        if st.get('done'):
+                            done_lines.append(f"   - [支线] {st.get('text', '')}")
+
+            doing_lines = []
+            for t in self.data.get('tasks', []):
+                doing_lines.append(f" - {t.get('text', '')}")
+                for st in t.get('subtasks', []):
+                    if not st.get('done'):
+                        doing_lines.append(f"   - [支线] {st.get('text', '')}")
+
+            content = "今日已完成:\n"
+            content += ("\n".join(done_lines) + "\n") if done_lines else "（今日暂无）\n"
+            content += "进行中:\n"
+            content += ("\n".join(doing_lines) + "\n") if doing_lines else "（暂无）\n"
+
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except Exception as e:
+            print(f"sync_daily_summary skipped: {e}")
     
     # ──────────────────────────────────────────────
     #  INPUT AREA — using pack() nested frames
@@ -106,23 +1160,23 @@ class TodoApp:
     #  of window size.
     # ──────────────────────────────────────────────
     def _build_input_area(self):
-        """Build the add-task area using reliable pack() layout."""
-        input_frame = tk.LabelFrame(self.root, text="添加新任务",
+        """Build the add-task area - same row layout."""
+        input_frame = tk.LabelFrame(self.root, text="",
                                     font=self.font_label,
                                     padx=12, pady=10)
         input_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
 
-        # ── Row 0: task content ──
+        # ── Row 0: label + entry + button (SAME ROW) ──
         row0 = tk.Frame(input_frame)
         row0.pack(fill=tk.X, pady=(0, 8))
 
-        tk.Label(row0, text="任务内容:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(row0, text="🎯 冒险描述:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
 
         self.task_entry = tk.Entry(row0, font=self.font_entry)
         self.task_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12))
         self.task_entry.bind('<Return>', lambda e: self.add_task())
 
-        add_btn = tk.Button(row0, text="✚ 添加任务", command=self.add_task,
+        add_btn = tk.Button(row0, text="✚ 领取新冒险", command=self.add_task,
                             bg="#4F81BD", fg="white", font=self.font_button,
                             cursor="hand2", padx=20, pady=4)
         add_btn.pack(side=tk.RIGHT)
@@ -134,7 +1188,7 @@ class TodoApp:
         # -- Priority group --
         g1 = tk.Frame(row1)
         g1.pack(side=tk.LEFT, padx=(0, 18))
-        tk.Label(g1, text="任务紧急程度:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g1, text="⚡ 紧急等级:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.priority_var = tk.StringVar(value=self.priority_options[0])
         self.priority_combo = ttk.Combobox(g1, textvariable=self.priority_var,
                                            values=self.priority_options,
@@ -144,7 +1198,7 @@ class TodoApp:
         # -- Category group --
         g2 = tk.Frame(row1)
         g2.pack(side=tk.LEFT, padx=(0, 18))
-        tk.Label(g2, text="任务类别:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g2, text="🗺️ 冒险类型:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.category_var = tk.StringVar(value=self.category_options[0])
         self.category_combo = ttk.Combobox(g2, textvariable=self.category_var,
                                            values=self.category_options,
@@ -153,10 +1207,18 @@ class TodoApp:
 
         # -- Person group --
         g3 = tk.Frame(row1)
-        g3.pack(side=tk.LEFT)
-        tk.Label(g3, text="责任人:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        g3.pack(side=tk.LEFT, padx=(0, 18))
+        tk.Label(g3, text="⚔️ 冒险者:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.person_entry = tk.Entry(g3, width=10, font=self.font_entry)
         self.person_entry.pack(side=tk.LEFT)
+        
+        # -- Tags group --
+        g4 = tk.Frame(row1)
+        g4.pack(side=tk.LEFT)
+        tk.Label(g4, text="🏷️ 标签:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        self.tags_entry = tk.Entry(g4, width=15, font=self.font_entry)
+        self.tags_entry.pack(side=tk.LEFT)
+        tk.Label(g4, text="(逗号分隔)", font=("Microsoft YaHei", 10), fg="#888888").pack(side=tk.LEFT, padx=(4, 0))
 
         return input_frame
 
@@ -165,75 +1227,197 @@ class TodoApp:
     # ──────────────────────────────────────────────
     def setup_gui(self):
         """Setup the GUI components"""
+        # Apply ttk theme for better aesthetics
+        style = ttk.Style()
+        available_themes = style.theme_names()
+        if 'clam' in available_themes:
+            style.theme_use('clam')
+        # Customize theme colors
+        style.configure('TNotebook.Tab', padding=[12, 8], font=self.font_label)
+        style.configure('Treeview', font=self.font_table_content, rowheight=45)
+        style.configure('Treeview.Heading', font=self.font_table_header)
+        
         # Title bar
-        title_frame = tk.Frame(self.root, bg="#4F81BD", height=60)
+        title_frame = tk.Frame(self.root, bg="#2C3E50", height=60)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
-
-        title_label = tk.Label(title_frame, text="ToDoList",
+        
+        title_label = tk.Label(title_frame, text="冒险者的游戏",
                                font=self.font_title,
-                               bg="#4F81BD", fg="white")
+                               bg="#2C3E50", fg="white")
         title_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
+        
         # Input area (pack layout — reliable)
         self._build_input_area()
 
-        # Notebook (tabs)
+        # Notebook (tabs) with custom tab style
+        style = ttk.Style()
+        style.configure("TNotebook.Tab", padding=[12, 8], font=self.font_label)
+        style.map("TNotebook.Tab",
+            background=[("selected", "#F0F0F0")])  # Light gray when selected/focused
+        
         notebook = ttk.Notebook(self.root)
+        self.notebook = notebook
         notebook.pack(fill=tk.BOTH, expand=True, padx=15, pady=(5, 10))
 
         pending_frame = tk.Frame(notebook)
-        notebook.add(pending_frame, text="📋 待完成任务")
+        notebook.add(pending_frame, text="🚀 进行中的冒险")
         self.setup_pending_tab(pending_frame)
 
         completed_frame = tk.Frame(notebook)
-        notebook.add(completed_frame, text="✅ 已完成任务")
+        notebook.add(completed_frame, text="🏁 已通关的冒险")
         self.setup_completed_tab(completed_frame)
 
         stats_frame = tk.Frame(notebook)
-        notebook.add(stats_frame, text="📊 任务统计")
+        notebook.add(stats_frame, text="📊 冒险战绩")
         self.setup_stats_tab(stats_frame)
+        
+        # Calendar tab
+        
+        # ── 底部状态栏（彩色 emoji 图片化：图标 + 文本）──
+        self._emoji_cache = {}
+        self._emoji_fonts = {}
+        self._emoji_font_path = self._find_emoji_font()
+        self.status_frame = tk.Frame(self.root, bg="#ECF0F1")
+        self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_icon = tk.Label(self.status_frame, bg="#ECF0F1")
+        self.status_icon.pack(side=tk.LEFT, padx=(10, 0))
+        self.status_text = tk.Label(self.status_frame, text="准备开始新的冒险！",
+                                    font=("Microsoft YaHei", 10),
+                                    bg="#ECF0F1", fg="#333333",
+                                    anchor=tk.W, padx=2, pady=4)
+        self.status_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.set_status("⚔️ 准备开始新的冒险！")
 
-        # Status bar
-        self.status_bar = tk.Label(self.root, text="就绪", relief=tk.SUNKEN,
-                                   anchor=tk.W, font=self.font_label, bg="#F0F0F0")
-        self.status_bar.pack(fill=tk.X, padx=15, pady=(0, 10))
-    
+        # Update game display initially
+        self.update_game_display()
+        # 方案A：把界面 emoji 渲染为彩色图片（绕过 Tkinter 单色字形）
+        self._apply_emoji_images(self.root)
+
     def setup_pending_tab(self, parent):
         """Setup pending tasks tab"""
         toolbar = tk.Frame(parent)
         toolbar.pack(fill=tk.X, pady=(10, 10))
         
-        tk.Button(toolbar, text="✓ 标记完成", command=self.complete_task,
+        tk.Button(toolbar, text="🎯 标记通关", command=self.complete_task,
                   bg="#5CB85C", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
         
-        tk.Button(toolbar, text="🗑 删除任务", command=self.delete_task,
+        tk.Button(toolbar, text="🗑 放弃冒险", command=self.delete_task,
                   bg="#D9534F", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(toolbar, text="✏ 编辑", command=self.edit_task,
+        tk.Button(toolbar, text="✏ 编辑冒险", command=self.edit_task,
                   bg="#F0AD4E", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Button(toolbar, text="🔄 刷新冒险", command=self.reload_data,
+                  bg="#6C757D", fg="white", font=self.font_button,
+                  cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
+        
+        # ── Sorting Dropdown ──
+        sort_frame = tk.Frame(toolbar)
+        sort_frame.pack(side=tk.LEFT, padx=(20, 0))
+        
+        tk.Label(sort_frame, text="排序：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
+        self.sort_combobox = ttk.Combobox(sort_frame, textvariable=self.sort_criteria,
+                                             values=["默认顺序", "按紧急程度", "按创建时间", "按任务描述"],
+                                             state="readonly", width=12, font=self.font_label)
+        self.sort_combobox.pack(side=tk.LEFT)
+        self.sort_combobox.bind('<<ComboboxSelected>>', lambda e: self.refresh_display())
+        
+        # ── Search Box ──
+        search_frame = tk.Frame(toolbar)
+        search_frame.pack(side=tk.LEFT, padx=(20, 0))
+        
+        tk.Label(search_frame, text="🔍 搜索：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_query, width=15, font=self.font_label)
+        self.search_entry.pack(side=tk.LEFT)
+        
+        # ── Compact Timer (right-aligned) ──
+        timer_frame = tk.Frame(toolbar)
+        timer_frame.pack(side=tk.RIGHT, padx=(0, 20))
+        
+        self.timer_label = tk.Label(timer_frame, textvariable=self.timer_display_var,
+                                   font=("Microsoft YaHei", 16, "bold"),
+                                   padx=8)
+        self.timer_label.pack(side=tk.LEFT)
+        
+        self.timer_btn = tk.Button(timer_frame, text="▶ 开始", command=self.toggle_timer,
+                                  bg="#3498DB", fg="white", font=("Microsoft YaHei", 11, "bold"),
+                                  cursor="hand2", padx=12, pady=4)
+        self.timer_btn.pack(side=tk.LEFT, padx=(8, 4))
+        
+        self.timer_reset_btn = tk.Button(timer_frame, text="⏹ 重置", command=self.reset_timer,
+                                        bg="#95A5A6", fg="white", font=("Microsoft YaHei", 11, "bold"),
+                                        cursor="hand2", padx=12, pady=4)
+        self.timer_reset_btn.pack(side=tk.LEFT)
+        
+        # Right-click on timer label to change time
+        self.timer_label.bind('<Button-3>', self.show_timer_menu)
+        self.timer_menu = tk.Menu(self.root, tearoff=0, font=self.font_label)
+        self.timer_menu.add_command(label="5分钟", command=lambda: self.set_timer(5))
+        self.timer_menu.add_command(label="15分钟", command=lambda: self.set_timer(15))
+        self.timer_menu.add_command(label="25分钟", command=lambda: self.set_timer(25))
+        self.timer_menu.add_command(label="30分钟", command=lambda: self.set_timer(30))
         
         # Table
         table_frame = tk.Frame(parent)
         table_frame.pack(fill=tk.BOTH, expand=True)
         
-        columns = ('ID', '任务内容', '任务类别', '任务紧急程度', '责任人', '创建时间')
-        self.pending_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
+        columns = ('☑️', '编号', '📝 冒险描述', '🗺️ 冒险类型', '⚡ 紧急等级', '⚔️ 冒险者', '🏷️ 标签', '📊 进度', '⏰ 领取时间')
+        self.pending_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=20)
         
         style = ttk.Style()
         style.configure("Treeview", font=self.font_table_content, rowheight=45)
         style.configure("Treeview.Heading", font=self.font_table_header)
         
-        col_widths = {'ID': 45, '任务内容': 310, '任务类别': 120, '任务紧急程度': 130, '责任人': 140, '创建时间': 170}
+        # 红色警报 任务加粗字体
+        self.pending_tree.tag_configure('红色警报', font=('Microsoft YaHei', 11, 'bold'))
+        
+        # 主线任务加粗（需求：进行中页主线加粗、支线不加粗；已通关页不动）
+        self.pending_tree.tag_configure('main', font=('Microsoft YaHei', 12, 'bold'))
+
+        # 树形层级列（最左折叠三角），支线挂到主线下由 Tk 自动缩进
+        self.pending_tree.column('#0', width=26, minwidth=26, stretch=False)
+        self.pending_tree.heading('#0', text='')
+        
+        col_widths = {
+            '☑️': 35,
+            '编号': 40,
+            '📝 冒险描述': 300,
+            '🗺️ 冒险类型': 100,
+            '⚡ 紧急等级': 100,
+            '⚔️ 冒险者': 100,
+            '🏷️ 标签': 90,
+            '📊 进度': 70,
+            '⏰ 领取时间': 140
+        }
+        # 各列最小宽度保底：窗口缩小时列名不再被截断（方案A，V1.6.20）
+        col_minwidths = {
+            '☑️': 30,
+            '编号': 50,
+            '📝 冒险描述': 150,
+            '🗺️ 冒险类型': 95,
+            '⚡ 紧急等级': 95,
+            '⚔️ 冒险者': 85,
+            '🏷️ 标签': 75,
+            '📊 进度': 75,
+            '⏰ 领取时间': 150
+        }
         for col in columns:
             self.pending_tree.heading(col, text=col, anchor=tk.CENTER)
-            stretch = (col == '任务内容')
-            anchor = tk.W if col == '责任人' else tk.CENTER
-            self.pending_tree.column(col, width=col_widths.get(col, 100),
-                                    minwidth=40, stretch=stretch, anchor=anchor)
+            # 方案B（V1.6.20修正）：仅「冒险描述」stretch=True 吸收伸缩，其余列全部钉死
+            # → 全屏后缩小 = 首开小窗口效果（核心列宽度不变）
+            anchor = tk.W if col in ['⚔️ 冒险者', '🏷️ 标签'] else tk.CENTER
+            w = col_widths.get(col, 100)
+            mw = col_minwidths.get(col, 40)
+            if col == '📝 冒险描述':
+                self.pending_tree.column(col, width=w, minwidth=mw, stretch=True, anchor=anchor)
+            elif col != '⏰ 领取时间':  # 领取时间单独在循环外处理
+                self.pending_tree.column(col, stretch=False, width=w, minwidth=mw, anchor=anchor)
+        # 时间列不参与拉伸压缩，窗口缩小时始终完整显示时间戳（V1.6.19）
+        self.pending_tree.column('⏰ 领取时间', stretch=False, width=150, minwidth=150)
         
         vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.pending_tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.pending_tree.xview)
@@ -245,6 +1429,258 @@ class TodoApp:
 
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
+        
+        # 绑定复选框点击事件
+        self.pending_tree.bind('<Button-1>', self.on_checkbox_click)
+        
+        # 绑定右键菜单
+        self.pending_tree.bind('<Button-3>', self.show_context_menu)
+    
+    def show_context_menu(self, event):
+        """Show right-click context menu for pending tasks"""
+        try:
+            # Select the item under cursor
+            item = self.pending_tree.identify_row(event.y)
+            
+            # Create context menu dynamically
+            context_menu = tk.Menu(self.root, tearoff=0, font=self.font_label)
+            
+            if item:
+                # Check if this is a subtask
+                is_subtask = "_subtask_" in item
+                
+                if is_subtask:
+                    # Selected a subtask - show menu with toggle/delete/edit
+                    self.pending_tree.selection_set(item)
+                    context_menu.add_command(label="✅ 完成支线任务", command=self.toggle_subtask_from_menu)
+                    context_menu.add_command(label="✏️ 修改任务描述", command=self.edit_subtask_from_menu)
+                    context_menu.add_command(label="🗑 放弃支线任务", command=self.delete_subtask_from_menu)
+                    context_menu.add_separator()
+                    context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+                else:
+                    # Selected a main task - show menu with delete/edit/add subtask
+                    self.pending_tree.selection_set(item)
+                    context_menu.add_command(label="🗑 放弃冒险", command=self.delete_task)
+                    context_menu.add_command(label="✏ 编辑冒险", command=self.edit_task)
+                    context_menu.add_command(label="🎯 接取支线任务", command=self.context_add_subtask)
+                    context_menu.add_separator()
+                    context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+            else:
+                # No task selected - show menu with add/refresh
+                context_menu.add_command(label="🎯 领取新冒险", command=self.show_add_task_dialog)
+                context_menu.add_separator()
+                context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+            
+            context_menu.post(event.x_root, event.y_root)
+        except Exception as e:
+            print(f"Error showing context menu: {e}")
+    
+    def context_add_subtask(self):
+        """Add a subtask directly from context menu."""
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                messagebox.showwarning("警告", "请选择要接取支线的冒险！")
+                return
+            
+            task_id = int(selection[0])
+            task = None
+            for t in self.data["tasks"]:
+                if t["id"] == task_id:
+                    task = t
+                    break
+            
+            if not task:
+                messagebox.showerror("错误", "未找到该冒险！")
+                return
+            
+            # Directly show the add subtask dialog
+            self.show_add_subtask_dialog(task)
+        except Exception as e:
+            print(f"Error adding subtask from context menu: {e}")
+    
+    def context_manage_subtasks(self):
+        """Manage subtasks from context menu."""
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                messagebox.showwarning("警告", "请选择要管理支线任务的冒险！")
+                return
+            
+            task_id = int(selection[0])
+            task = None
+            for t in self.data["tasks"]:
+                if t["id"] == task_id:
+                    task = t
+                    break
+            
+            if not task:
+                messagebox.showerror("错误", "未找到该冒险！")
+                return
+            
+            self.manage_subtasks(task)
+        except Exception as e:
+            print(f"Error managing subtasks from context menu: {e}")
+    
+    def toggle_subtask_from_menu(self):
+        """Toggle subtask completion from context menu."""
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                return
+            
+            item = selection[0]
+            if "_subtask_" in item:
+                # Parse subtask iid: "{task_id}_subtask_{subtask_idx}"
+                parts = item.split("_subtask_")
+                task_id = int(parts[0])
+                subtask_idx = int(parts[1]) - 1  # Convert to 0-based index
+                
+                # Find the task and toggle subtask
+                for task in self.data["tasks"]:
+                    if task["id"] == task_id:
+                        if "subtasks" in task and subtask_idx < len(task["subtasks"]):
+                            # Toggle subtask done status
+                            task["subtasks"][subtask_idx]["done"] = not task["subtasks"][subtask_idx].get("done", False)
+                            self.save_data()
+                            self.refresh_display()
+                            self.set_status("✓ 支线任务状态已更新！")
+                        break
+        except Exception as e:
+            print(f"Error toggling subtask: {e}")
+    
+    def delete_subtask_from_menu(self):
+        """Delete subtask from context menu."""
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                return
+            
+            item = selection[0]
+            if "_subtask_" in item:
+                # Parse subtask iid: "{task_id}_subtask_{subtask_idx}"
+                parts = item.split("_subtask_")
+                task_id = int(parts[0])
+                subtask_idx = int(parts[1]) - 1  # Convert to 0-based index
+                
+                # Confirm deletion
+                if not messagebox.askyesno("确认删除", "确定要删除这个支线任务吗？"):
+                    return
+                
+                # Find the task and delete subtask
+                for task in self.data["tasks"]:
+                    if task["id"] == task_id:
+                        if "subtasks" in task and subtask_idx < len(task["subtasks"]):
+                            # Delete subtask
+                            task["subtasks"].pop(subtask_idx)
+                            self.save_data()
+                            self.refresh_display()
+                            self.set_status("🗑 支线任务已删除！")
+                        break
+        except Exception as e:
+            print(f"Error deleting subtask: {e}")
+    
+    def edit_subtask_from_menu(self):
+        """Edit subtask text from context menu."""
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                return
+            
+            item = selection[0]
+            if "_subtask_" not in item:
+                return
+            
+            # Parse subtask iid: "{task_id}_subtask_{subtask_idx}"
+            parts = item.split("_subtask_")
+            task_id = int(parts[0])
+            subtask_idx = int(parts[1]) - 1  # Convert to 0-based index
+            
+            # Find the task and subtask
+            task = None
+            subtask = None
+            for t in self.data["tasks"]:
+                if t["id"] == task_id:
+                    task = t
+                    if "subtasks" in t and subtask_idx < len(t["subtasks"]):
+                        subtask = t["subtasks"][subtask_idx]
+                    break
+            
+            if not subtask:
+                messagebox.showerror("错误", "未找到该支线任务！")
+                return
+            
+            # Create edit dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title(f"✏️ 修改任务描述")
+            dialog.geometry("400x210")
+            dialog.resizable(False, False)
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            # Center the dialog
+            dialog.update_idletasks()
+            width = dialog.winfo_width()
+            height = dialog.winfo_height()
+            x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+            y = (dialog.winfo_screenheight() // 2) - (height // 2)
+            dialog.geometry(f"{width}x{height}+{x}+{y}")
+            
+            # Label
+            tk.Label(dialog, text="📝 支线任务描述:", font=self.font_label).pack(anchor=tk.W, padx=20, pady=(20, 5))
+            
+            # Entry
+            text_var = tk.StringVar(value=subtask.get("text", ""))
+            entry = tk.Entry(dialog, font=self.font_entry, textvariable=text_var, width=40)
+            entry.pack(padx=20, pady=(0, 12))
+            entry.focus_set()
+            entry.select_range(0, tk.END)
+            
+            # 标签
+            tk.Label(dialog, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, padx=20, pady=(0, 4))
+            tags_var = tk.StringVar(value=", ".join(subtask.get("tags", [])))
+            tags_entry = tk.Entry(dialog, font=self.font_entry, textvariable=tags_var, width=40)
+            tags_entry.pack(padx=20, pady=(0, 20))
+            
+            # Buttons
+            btn_frame = tk.Frame(dialog)
+            btn_frame.pack(pady=(0, 20))
+            
+            def save_edit():
+                new_text = text_var.get().strip()
+                if not new_text:
+                    messagebox.showwarning("警告", "支线任务描述不能为空！")
+                    return
+                
+                # 校验并更新标签
+                tags_text = tags_var.get().strip()
+                is_valid, error_msg, tags = self.validate_tags(tags_text)
+                if not is_valid:
+                    messagebox.showwarning("警告", error_msg)
+                    return
+                
+                # Update subtask text
+                subtask["text"] = new_text
+                subtask["tags"] = tags
+                self.save_data()
+                self.refresh_display()
+                self.set_status("✏️ 支线任务已更新！")
+                dialog.destroy()
+            
+            tk.Button(btn_frame, text="取消", command=dialog.destroy,
+                     font=self.font_button, padx=20, pady=5).pack(side=tk.LEFT, padx=(0, 10))
+            tk.Button(btn_frame, text="✅ 保存", command=save_edit,
+                     bg="#4F81BD", fg="white", font=self.font_button,
+                     cursor="hand2", padx=20, pady=5).pack(side=tk.LEFT)
+            
+            # Bind Enter key to save
+            dialog.bind('<Return>', lambda e: save_edit())
+            self._apply_emoji_images(dialog)
+            
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            messagebox.showerror("编辑支线任务出错", f"错误详情:\n{str(e)}")
     
     def setup_completed_tab(self, parent):
         """Setup completed tasks tab"""
@@ -252,7 +1688,7 @@ class TodoApp:
         filter_frame = tk.Frame(parent)
         filter_frame.pack(fill=tk.X, pady=(10, 10))
 
-        tk.Label(filter_frame, text="筛选日期:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(filter_frame, text="🔍 筛选日期:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
 
         self.date_filter = ttk.Combobox(filter_frame, width=22, state='readonly', font=self.font_entry)
         self.date_filter.pack(side=tk.LEFT, padx=(0, 15))
@@ -262,35 +1698,73 @@ class TodoApp:
         toolbar = tk.Frame(parent)
         toolbar.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Button(toolbar, text="🗑 删除所选", command=self.delete_completed,
+        tk.Button(toolbar, text="🗑 删除冒险", command=self.delete_completed,
                   bg="#E67E22", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(toolbar, text="🗑 删除全部", command=self.delete_all_completed,
+        tk.Button(toolbar, text="🗑 清空冒险", command=self.delete_all_completed,
                   bg="#C0392B", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 16))
 
-        tk.Button(toolbar, text="📤 导出 Excel", command=self.export_completed,
+        tk.Button(toolbar, text="📤 导出战绩", command=self.export_completed,
                   bg="#4F81BD", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Label(toolbar, text="已完成任务自动保存，关闭后不丢失",
-                 font=self.font_label, fg="#888888").pack(side=tk.LEFT, padx=(20, 0))
-
+        
+        # ── Sorting Dropdown ──
+        sort_frame = tk.Frame(toolbar)
+        sort_frame.pack(side=tk.LEFT, padx=(20, 0))
+        
+        tk.Label(sort_frame, text="排序：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
+        self.sort_combobox_completed = ttk.Combobox(sort_frame, textvariable=self.sort_criteria, 
+                                                   values=["默认顺序", "按紧急程度", "按创建时间", "按任务描述", "按通关时间"],
+                                                   state="readonly", width=12, font=self.font_label)
+        self.sort_combobox_completed.pack(side=tk.LEFT)
+        self.sort_combobox_completed.bind('<<ComboboxSelected>>', lambda e: self.refresh_completed())
+        
+        # ── Search Box ──
+        search_frame = tk.Frame(toolbar)
+        search_frame.pack(side=tk.LEFT, padx=(20, 0))
+        
+        tk.Label(search_frame, text="🔍 搜索：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
+        self.search_entry_completed = ttk.Entry(search_frame, textvariable=self.search_query, width=15, font=self.font_label)
+        self.search_entry_completed.pack(side=tk.LEFT)
+        
         # Table
         table_frame = tk.Frame(parent)
         table_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ('ID', '任务内容', '任务类别', '任务紧急程度', '责任人', '完成时间')
+        columns = ('☑️', '编号', '📝 冒险描述', '🗺️冒险类型', '⚡ 紧急等级', '⚔️ 冒险者', '🏷️ 标签', '📊 进度', '🏁 通关时间', '⏱️ 冒险时长')
         self.completed_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
         
-        col_widths = {'ID': 45, '任务内容': 310, '任务类别': 120, '任务紧急程度': 130, '责任人': 140, '完成时间': 170}
+        # 已完成任务背景色配置
+        # 当天完成:深灰色 | 超过1天:浅灰色
+        self.completed_tree.tag_configure('completed_today', background='#A9A9A9', foreground='#666666')
+        self.completed_tree.tag_configure('completed_old', background='#D3D3D3', foreground='#666666')
+        
+        col_widths = {
+            '☑️': 35, '编号': 40, '📝 冒险描述': 260,
+            '🗺️冒险类型': 100, '⚡ 紧急等级': 100, '⚔️ 冒险者': 100,
+            '🏷️ 标签': 90, '📊 进度': 70,
+            '🏁 通关时间': 130, '⏱️ 冒险时长': 100
+        }
+        col_minwidths = {
+            '☑️': 30, '编号': 35, '📝 冒险描述': 260,
+            '🗺️冒险类型': 80, '⚡ 紧急等级': 80, '⚔️ 冒险者': 80,
+            '🏷️ 标签': 70, '📊 进度': 60,
+            '🏁 通关时间': 110, '⏱️ 冒险时长': 90
+        }
         for col in columns:
             self.completed_tree.heading(col, text=col, anchor=tk.CENTER)
-            stretch = (col == '任务内容')
-            anchor = tk.W if col == '责任人' else tk.CENTER
-            self.completed_tree.column(col, width=col_widths.get(col, 100),
-                                      minwidth=40, stretch=stretch, anchor=anchor)
+            # 方案B（V1.6.21 同步）：仅「冒险描述」stretch=True 吸收伸缩，其余列全部钉死
+            # → 全屏后缩小 = 首开小窗口效果
+            anchor = tk.W if col in ['⚔️ 冒险者', '🏷️ 标签'] else tk.CENTER
+            w = col_widths.get(col, 100)
+            mw = col_minwidths.get(col, 40)
+            if col == '📝 冒险描述':
+                self.completed_tree.column(col, width=w, minwidth=mw, stretch=True, anchor=anchor)
+            else:
+                self.completed_tree.column(col, stretch=False, width=w, minwidth=mw, anchor=anchor)
 
         vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.completed_tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.completed_tree.xview)
@@ -302,24 +1776,124 @@ class TodoApp:
 
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
+        
+        # 绑定右键菜单
+        self.completed_tree.bind('<Button-3>', self.show_completed_context_menu)
+        self.completed_context_menu = tk.Menu(self.root, tearoff=0, font=self.font_label)
+        self.completed_context_menu.add_command(label="🔄 恢复冒险", command=self.restore_task)
+        self.completed_context_menu.add_command(label="🗑 删除冒险", command=self.delete_completed)
+        self.completed_context_menu.add_command(label="📤 导出战绩", command=self.export_completed)
+        self.completed_context_menu.add_command(label="🗑 清空冒险", command=self.delete_all_completed)
+    
+    def show_completed_context_menu(self, event):
+        """Show right-click context menu for completed tasks"""
+        try:
+            # Select the item under cursor
+            item = self.completed_tree.identify_row(event.y)
+            if item:
+                self.completed_tree.selection_set(item)
+                self.completed_context_menu.post(event.x_root, event.y_root)
+        except Exception as e:
+            print(f"Error showing completed context menu: {e}")
     
     def setup_stats_tab(self, parent):
-        """Setup statistics tab with overview and breakdown tables"""
-        # ── 0. Week filter ──
-        filter_frame = tk.Frame(parent)
+        """Setup statistics tab with growth system panels + overview tables"""
+        # ── 可滚动容器：解决战绩内容超长无法滚轮查看 ──
+        stats_canvas = tk.Canvas(parent, bg="#F0F0F0", highlightthickness=0)
+        stats_scrollbar = ttk.Scrollbar(parent, orient="vertical",
+                                        command=stats_canvas.yview)
+        stats_canvas.configure(yscrollcommand=stats_scrollbar.set)
+        stats_scrollbar.pack(side="right", fill="y")
+        stats_canvas.pack(side="left", fill="both", expand=True)
+
+        container = tk.Frame(stats_canvas, bg="#F0F0F0")
+        container_id = stats_canvas.create_window((0, 0), window=container, anchor="nw")
+
+        def _sync_stats_width(event=None):
+            stats_canvas.itemconfig(container_id, width=stats_canvas.winfo_width())
+            stats_canvas.configure(scrollregion=stats_canvas.bbox("all"))
+
+        container.bind("<Configure>", lambda e: stats_canvas.configure(
+            scrollregion=stats_canvas.bbox("all")))
+        stats_canvas.bind("<Configure>", _sync_stats_width)
+
+        def _on_stats_mousewheel(event):
+            # 仅当「冒险战绩」tab 可见时才滚动，避免影响其他 tab
+            try:
+                if str(self.notebook.select()) == str(parent):
+                    stats_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass
+
+        stats_canvas.bind_all("<MouseWheel>", _on_stats_mousewheel)
+        # ── 0. 成长系统面板（顶部，两个独立面板）──
+        growth_outer = tk.Frame(container, bg="#F0F0F0")
+        growth_outer.pack(fill=tk.X, padx=10, pady=(10, 8))
+        
+        growth_frame = tk.Frame(growth_outer, bg="#F0F0F0")
+        growth_frame.pack(fill=tk.X)
+        
+        # ── 0a. 本周黄金之路面板（V1.6.0：移除金币系统，改为每周智慧）──
+        exp_card = tk.Frame(growth_frame, bg="#2C3E50")
+        exp_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        tk.Label(exp_card, text="🏆 本周黄金之路", font=("Microsoft YaHei", 13, "bold"),
+                 bg="#2C3E50", fg="#ECF0F1").pack(anchor=tk.W)
+        
+        self.exp_rank_label = tk.Label(
+            exp_card, text="菜鸟路人 | Lv.1", font=("Microsoft YaHei", 22, "bold"),
+            bg="#2C3E50", fg="#F1C40F"
+        )
+        self.exp_rank_label.pack(pady=(6, 2))
+        
+        # 本周进度（剩余天数）
+        self.exp_daily_label = tk.Label(
+            exp_card, text="📅 本周第1天，剩余6天", font=("Microsoft YaHei", 12, "bold"),
+            bg="#2C3E50", fg="#2ECC71"
+        )
+        self.exp_daily_label.pack(pady=(0, 4))
+        
+        # 智慧进度条（Canvas绘制）
+        self.exp_progress_canvas = tk.Canvas(exp_card, width=320, height=24,
+                                              bg="#34495E", highlightthickness=0)
+        self.exp_progress_canvas.pack(pady=(4, 2))
+        
+        self.exp_detail_label = tk.Label(
+            exp_card, text="0/60 智慧 → 见习旅者 (Lv.2)", font=("Microsoft YaHei", 10),
+            bg="#2C3E50", fg="#BDC3C7"
+        )
+        self.exp_detail_label.pack(anchor=tk.W, pady=(2, 0))
+        
+        # ── 1. Week filter ──
+        filter_frame = tk.Frame(container)
         filter_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
         
         tk.Label(filter_frame, text="选择周:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
         
-        self.week_filter_var = tk.StringVar(value="全部")
+        self.week_filter_var = tk.StringVar(value="")
         self.week_filter_combo = ttk.Combobox(filter_frame, textvariable=self.week_filter_var,
                                                width=22, state='readonly', font=self.font_entry)
         self.week_filter_combo.pack(side=tk.LEFT, padx=(0, 15))
         self.week_filter_combo.bind('<<ComboboxSelected>>',
                                     lambda e: self.refresh_stats())
         
+        # ── 实时时钟（选择周 右侧显示，描边幽灵牌：浅灰底+蓝描边+蓝色线条时钟+蓝字）──
+        self.clock_frame = tk.Frame(filter_frame, bg="#F0F0F0",
+                                    highlightbackground="#4F81BD", highlightthickness=1,
+                                    bd=0, relief="flat")
+        self.clock_frame.pack(side=tk.RIGHT, padx=(10, 0))
+        # 蓝色线条时钟图标（Canvas 绘制，规避 emoji 单色限制，颜色可控与描边同色）
+        self.clock_canvas = tk.Canvas(self.clock_frame, width=16, height=16,
+                                      bg="#F0F0F0", highlightthickness=0)
+        self.clock_canvas.pack(side=tk.LEFT, padx=(6, 2))
+        # 时间文字（深蓝，与界面主色一致）
+        self.clock_text = tk.Label(self.clock_frame, text="", fg="#2C3E50",
+                                   bg="#F0F0F0", font=self.font_label)
+        self.clock_text.pack(side=tk.LEFT, padx=(0, 6))
+        self._update_clock()
+        
         # ── 1. Overview cards ──
-        overview_frame = tk.LabelFrame(parent, text="📊 总览",
+        overview_frame = tk.LabelFrame(container, text="📊 总览",
                                        font=self.font_label, padx=15, pady=12)
         overview_frame.pack(fill=tk.X, padx=10, pady=(0, 8))
         
@@ -331,9 +1905,9 @@ class TodoApp:
         self.stat_rate = tk.StringVar(value="0%")
         
         card_data = [
-            ("待完成任务", self.stat_pending, "#F0AD4E"),
-            ("已完成任务", self.stat_completed, "#5CB85C"),
-            ("完成率", self.stat_rate, "#4F81BD"),
+            ("🚀 进行中", self.stat_pending, "#F0AD4E"),
+            ("🏁 已通关", self.stat_completed, "#5CB85C"),
+            ("📊 通关率", self.stat_rate, "#4F81BD"),
         ]
         for i, (label, var, bg) in enumerate(card_data):
             card = tk.Frame(card_frame, bg=bg, padx=20, pady=8)
@@ -346,15 +1920,15 @@ class TodoApp:
                      bg=bg, fg="white").pack()
         
         # ── 2. By Priority + By Category side by side ──
-        mid_frame = tk.Frame(parent)
+        mid_frame = tk.Frame(container)
         mid_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
         # -- Priority table --
-        pri_frame = tk.LabelFrame(mid_frame, text="按紧急程度",
+        pri_frame = tk.LabelFrame(mid_frame, text="⚡ 按紧急等级",
                                   font=self.font_label, padx=8, pady=8)
         pri_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
-        p_cols = ('紧急程度', '待完成', '已完成', '合计')
+        p_cols = ('⚡ 紧急等级', '🚀 进行中', '🏁 已通关', '📊 合计')
         self.stat_priority_tree = ttk.Treeview(pri_frame, columns=p_cols,
                                                show='headings', height=5)
         for c in p_cols:
@@ -363,24 +1937,35 @@ class TodoApp:
         self.stat_priority_tree.pack(fill=tk.BOTH, expand=True)
         
         # -- Category table --
-        cat_frame = tk.LabelFrame(mid_frame, text="按任务类别",
+        cat_frame = tk.LabelFrame(mid_frame, text="🗺️ 按冒险类型",
                                   font=self.font_label, padx=8, pady=8)
         cat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        c_cols = ('任务类别', '待完成', '已完成', '合计')
+        c_cols = ('🗺️ 冒险类型', '🚀 进行中', '🏁 已通关', '📊 合计')
         self.stat_category_tree = ttk.Treeview(cat_frame, columns=c_cols,
                                                show='headings', height=5)
+        col_widths = {'🗺️ 冒险类型': 135, '🚀 进行中': 95, '🏁 已通关': 95, '📊 合计': 95}
         for c in c_cols:
             self.stat_category_tree.heading(c, text=c, anchor=tk.CENTER)
-            self.stat_category_tree.column(c, width=105, minwidth=80, anchor=tk.CENTER)
+            self.stat_category_tree.column(c, width=col_widths.get(c, 95), minwidth=80, anchor=tk.CENTER)
         self.stat_category_tree.pack(fill=tk.BOTH, expand=True)
         
         # ── 3. By Date ──
-        date_frame = tk.LabelFrame(parent, text="按日期统计（已完成）",
+        date_frame = tk.LabelFrame(container, text="📅 按日期统计（已通关）",
                                    font=self.font_label, padx=8, pady=8)
         date_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-        
-        d_cols = ('日期', '完成数')
+
+        # 日期筛选下拉（默认全部，可选具体某天）
+        dfilter_row = tk.Frame(date_frame)
+        dfilter_row.pack(fill=tk.X, pady=(0, 6))
+        tk.Label(dfilter_row, text="筛选日期：", font=self.font_entry).pack(side=tk.LEFT)
+        self.stat_date_filter = ttk.Combobox(dfilter_row, width=20, state='readonly',
+                                             font=self.font_entry)
+        self.stat_date_filter.pack(side=tk.LEFT, padx=(6, 0))
+        self.stat_date_filter.bind('<<ComboboxSelected>>',
+                                   lambda e: self._refresh_stat_date())
+
+        d_cols = ('📅 日期', '🏁 通关数')
         self.stat_date_tree = ttk.Treeview(date_frame, columns=d_cols,
                                            show='headings')
         for c in d_cols:
@@ -388,71 +1973,229 @@ class TodoApp:
             self.stat_date_tree.column(c, width=160, minwidth=100, anchor=tk.CENTER)
         self.stat_date_tree.pack(fill=tk.BOTH, expand=True)
     
+
     def add_task(self):
         """Add a new task"""
-        task_text = self.task_entry.get().strip()
-        if not task_text:
-            messagebox.showwarning("警告", "请输入任务内容！")
-            return
-        
-        priority = self.priority_var.get()
-        category = self.category_var.get()
-        person = self.person_entry.get().strip()
-        
-        task = {
-            "id": len(self.data["tasks"]) + len(self.data["completed"]) + 1,
-            "text": task_text,
-            "priority": priority,
-            "category": category,
-            "person": person,
-            "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        self.data["tasks"].append(task)
-        self.save_data()
-        self.task_entry.delete(0, tk.END)
-        self.person_entry.delete(0, tk.END)
-        self.refresh_display()
-        self.status_bar.config(text=f"✓ 任务已添加: {task_text}")
+        try:
+            task_text = self.task_entry.get().strip()
+            
+            # Validate task text
+            is_valid, error_msg = self.validate_task_text(task_text)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            priority = self.priority_var.get()
+            category = self.category_var.get()
+            person = self.person_entry.get().strip()
+            
+            # Validate person name
+            is_valid, error_msg = self.validate_person_name(person)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            if not person:
+                person = "韦程"
+            
+            # Process and validate tags
+            tags_text = self.tags_entry.get().strip()
+            is_valid, error_msg, tags = self.validate_tags(tags_text)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            # Calculate new unique ID
+            all_tasks = self.data["tasks"] + self.data["completed"]
+            all_ids = [t["id"] for t in all_tasks if "id" in t]
+            new_id = max(all_ids) + 1 if all_ids else 1
+            
+            task = {
+                "id": new_id,
+                "text": task_text,
+                "priority": priority,
+                "category": category,
+                "person": person,
+                "tags": tags,  # Add tags field
+                "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            self.data["tasks"].append(task)
+            self.save_data()
+            self.task_entry.delete(0, tk.END)
+            self.person_entry.delete(0, tk.END)
+            self.tags_entry.delete(0, tk.END)  # Clear tags input
+            self.refresh_display()
+            
+            # Update game data
+            self.game_data["stats"]["total_added"] += 1
+            self.save_game_data()
+            self.update_game_display()
+            
+            # Show new task animation
+            self.show_new_task_animation()
+            
+            self.set_status(f"🎯 冒险已领取：{task_text}")
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(error_detail)
+            messagebox.showerror("🎯 领取新冒险出错", f"错误详情:\n{str(e)}")
     
     def complete_task(self):
         """Mark a task as completed"""
-        selection = self.pending_tree.selection()
-        if not selection:
-            messagebox.showwarning("警告", "请选择要完成的任务！")
-            return
-        
-        task_id = int(selection[0])
-        
-        for i, task in enumerate(self.data["tasks"]):
-            if task["id"] == task_id:
-                task["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.data["completed"].append(task)
-                self.data["tasks"].pop(i)
-                break
-        
-        self.save_data()
-        self.refresh_display()
-        self.status_bar.config(text="✓ 任务已标记为完成")
+        try:
+            selection = self.pending_tree.selection()
+            if not selection:
+                messagebox.showwarning("警告", "🎮 请选择要通关的冒险！")
+                return
+            
+            task_id = int(selection[0])
+            task = None
+            
+            for i, t in enumerate(self.data["tasks"]):
+                if t["id"] == task_id:
+                    task = t
+                    t["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.data["completed"].append(t)
+                    self.data["tasks"].pop(i)
+                    break
+            
+            self.save_data()
+            self.refresh_display()
+            
+            # Update game data
+            if task:
+                self.game_data["stats"]["total_completed"] += 1
+                
+                # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
+                priority = task.get("priority", "")
+                amount = WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
+                task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
+                self.add_wisdom(amount)
+                
+                self.check_achievements(task)
+                self.save_game_data()
+                self.update_game_display()
+            
+            # Show wisdom animation
+            self.show_wisdom_animation(amount)
+            
+            # Show fireworks animation
+            self.show_fireworks_animation()
+            
+            self.set_status("🏁 冒险已通关！")
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            messagebox.showerror("操作出错", f"错误详情:\n{str(e)}")
+    
+    def on_checkbox_click(self, event):
+        """Handle checkbox click in pending tasks - mark task as complete or toggle subtask"""
+        try:
+            # Get the clicked item and column
+            item = self.pending_tree.identify_row(event.y)
+            column = self.pending_tree.identify_column(event.x)
+            
+            # #0 树列（折叠三角 ▸/▾）仅负责展开/折叠，不进入完成逻辑
+            if column == '#0':
+                return
+            
+            # 复选框位于第一个数据列 #1（#0 为树形折叠三角列，固定不后移）
+            if column == '#1' and item:
+                # Check if this is a subtask (iid contains "_subtask_")
+                if "_subtask_" in item:
+                    # Parse subtask iid: "{task_id}_subtask_{subtask_idx}"
+                    parts = item.split("_subtask_")
+                    task_id = int(parts[0])
+                    subtask_idx = int(parts[1]) - 1  # Convert to 0-based index
+                    
+                    # Find the task and toggle subtask
+                    for task in self.data["tasks"]:
+                        if task["id"] == task_id:
+                            if "subtasks" in task and subtask_idx < len(task["subtasks"]):
+                                # Toggle subtask done status
+                                task["subtasks"][subtask_idx]["done"] = not task["subtasks"][subtask_idx].get("done", False)
+                                self.save_data()
+                                self.refresh_display()
+                                self.set_status("✓ 支线任务状态已更新！")
+                            break
+                else:
+                    # Main task - mark as complete
+                    task_id = int(item)
+                    
+                    # Get task object before removing
+                    task = None
+                    for t in self.data["tasks"]:
+                        if t["id"] == task_id:
+                            task = t
+                            break
+                    
+                    # Mark task as complete (same logic as complete_task)
+                    for i, t in enumerate(self.data["tasks"]):
+                        if t["id"] == task_id:
+                            t["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            self.data["completed"].append(t)
+                            self.data["tasks"].pop(i)
+                            break
+                    
+                    self.save_data()
+                    self.refresh_display()
+                    
+                    # Update game data
+                    if task:
+                        self.game_data["stats"]["total_completed"] += 1
+                        
+                        # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
+                        priority = task.get("priority", "")
+                        amount = WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
+                        task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
+                        self.add_wisdom(amount)
+                        
+                        self.check_achievements(task)
+                        self.save_game_data()
+                        self.update_game_display()
+                    
+                    # Show wisdom animation
+                    self.show_wisdom_animation(amount)
+                    
+                    # Show fireworks animation
+                    self.show_fireworks_animation()
+                    
+                    self.set_status("🏁 冒险已通关！")
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            messagebox.showerror("操作出错", f"错误详情:\n{str(e)}")
     
     def delete_task(self):
-        """Delete a pending task"""
+        """Delete a pending task with confirmation"""
         selection = self.pending_tree.selection()
         if not selection:
-            messagebox.showwarning("警告", "请选择要删除的任务！")
+            messagebox.showwarning("警告", "🗑️ 请选择要放弃的冒险！")
             return
         
         task_id = int(selection[0])
+        # Find task text for confirmation
+        task_text = ""
+        for t in self.data["tasks"]:
+            if t["id"] == task_id:
+                task_text = t.get("text", "")
+                break
+        
+        if not messagebox.askyesno("确认放弃", f"🗑️ 确定要放弃这个冒险吗？\n\n冒险: {task_text}"):
+            return
+        
         self.data["tasks"] = [t for t in self.data["tasks"] if t["id"] != task_id]
         self.save_data()
         self.refresh_display()
-        self.status_bar.config(text="✓ 任务已删除")
+        self.set_status("🗑️ 冒险已放弃！")
     
     def edit_task(self):
         """Edit selected pending task's content, category, priority, or person"""
         selection = self.pending_tree.selection()
         if not selection:
-            messagebox.showwarning("警告", "请选择要编辑的任务！")
+            messagebox.showwarning("警告", "🎮 请选择要编辑的冒险！")
             return
         
         task_id = int(selection[0])
@@ -463,34 +2206,42 @@ class TodoApp:
                 break
         
         if not task:
-            messagebox.showerror("错误", "未找到该任务！")
+            messagebox.showerror("错误", "🎮 未找到该冒险！")
             return
         
         # ── Build edit dialog ──
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"编辑任务 #{task_id}")
-        dialog.geometry("520x300")
+        dialog.title(f"✏️ 编辑冒险 #{task_id}")
+        dialog.geometry("520x450")  # Increased height to show all fields
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        
         main_frame = tk.Frame(dialog, padx=20, pady=20)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # --- 任务内容 ---
-        tk.Label(main_frame, text="任务内容:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        # --- 📝 冒险描述 ---
+        tk.Label(main_frame, text="📝 冒险描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         text_var = tk.StringVar(value=task.get("text", ""))
         text_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=text_var)
         text_entry.pack(fill=tk.X, pady=(0, 14))
         text_entry.focus_set()
         
-        # --- 任务类别 ---
+        # --- 🗺️ 冒险类型 ---
         row_frame = tk.Frame(main_frame)
         row_frame.pack(fill=tk.X, pady=(0, 14))
         
         g1 = tk.Frame(row_frame)
         g1.pack(side=tk.LEFT, padx=(0, 20))
-        tk.Label(g1, text="任务类别:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g1, text="🗺️ 冒险类型:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         category_var = tk.StringVar(value=task.get("category", self.category_options[0]))
         category_combo = ttk.Combobox(g1, textvariable=category_var,
                                       values=self.category_options,
@@ -499,35 +2250,64 @@ class TodoApp:
         
         g2 = tk.Frame(row_frame)
         g2.pack(side=tk.LEFT)
-        tk.Label(g2, text="任务紧急程度:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g2, text="⚡ 紧急等级:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         priority_var = tk.StringVar(value=task.get("priority", self.priority_options[0]))
         priority_combo = ttk.Combobox(g2, textvariable=priority_var,
                                       values=self.priority_options,
                                       state='readonly', width=16, font=self.font_entry)
         priority_combo.pack()
         
-        # --- 责任人 ---
-        tk.Label(main_frame, text="责任人:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        # --- ⚔️ 冒险者 ---
+        tk.Label(main_frame, text="⚔️ 冒险者:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         person_var = tk.StringVar(value=task.get("person", ""))
         person_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=person_var)
-        person_entry.pack(fill=tk.X, pady=(0, 18))
+        person_entry.pack(fill=tk.X, pady=(0, 14))
+        
+        # --- 🏷️ 标签 ---
+        tk.Label(main_frame, text="🏷️ 标签: (逗号分隔)", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tags_var = tk.StringVar(value=", ".join(task.get("tags", [])))
+        tags_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=tags_var)
+        tags_entry.pack(fill=tk.X, pady=(0, 18))
         
         # --- Buttons ---
         btn_frame = tk.Frame(main_frame)
         btn_frame.pack(fill=tk.X)
         
         def save_edit():
+            """Save the edited task."""
             new_text = text_var.get().strip()
-            if not new_text:
-                messagebox.showwarning("警告", "任务内容不能为空！")
+            
+            # Validate task text
+            is_valid, error_msg = self.validate_task_text(new_text)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
                 return
+            
             task["text"] = new_text
             task["category"] = category_var.get()
             task["priority"] = priority_var.get()
-            task["person"] = person_var.get().strip()
+            person_val = person_var.get().strip()
+            
+            # Validate person name
+            is_valid, error_msg = self.validate_person_name(person_val)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            task["person"] = person_val if person_val else "韦程"
+            
+            # Validate tags
+            tags_text = tags_var.get().strip()
+            is_valid, error_msg, tags = self.validate_tags(tags_text)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            task["tags"] = tags
+            
             self.save_data()
             self.refresh_display()
-            self.status_bar.config(text=f"✓ 任务已更新: {new_text}")
+            self.set_status(f"✏️ 冒险已更新: {new_text}")
             dialog.destroy()
         
         tk.Button(btn_frame, text="✚ 保存修改", command=save_edit,
@@ -537,51 +2317,149 @@ class TodoApp:
         tk.Button(btn_frame, text="取消", command=dialog.destroy,
                   font=self.font_button,
                   cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT)
+        self._apply_emoji_images(dialog)
+    
+    def restore_task(self):
+        """Restore a completed task back to pending"""
+        try:
+            selection = self.completed_tree.selection()
+            if not selection:
+                messagebox.showwarning("警告", "🔄 请选择要恢复的冒险！")
+                return
+            
+            task_id = int(selection[0])
+            
+            # Find the task in completed list
+            task_to_restore = None
+            for i, task in enumerate(self.data["completed"]):
+                if task["id"] == task_id:
+                    task_to_restore = task
+                    break
+            
+            if not task_to_restore:
+                messagebox.showerror("错误", "未找到该任务！")
+                return
+            
+            # 计算需扣回的智慧（恢复=撤销完成）
+            restore_wisdom = task_to_restore.get("wisdom_gain", 0)
+            is_this_week = self.is_task_this_week(
+                task_to_restore.get("completed", ""),
+                self.game_data.get("week_start_date", "")
+            )
+            
+            # Remove completed timestamp
+            if "completed" in task_to_restore:
+                del task_to_restore["completed"]
+            
+            # Move task back to pending
+            self.data["tasks"].append(task_to_restore)
+            self.data["completed"].remove(task_to_restore)
+            
+            self.save_data()
+            self.refresh_display()
+            # 同步扣回智慧
+            if restore_wisdom > 0:
+                self.subtract_wisdom(restore_wisdom, restore_wisdom if is_this_week else 0)
+            # V1.6.2：恢复=撤销完成，total_completed 同步回退，保持统计一致
+            self.game_data["stats"]["total_completed"] = max(
+                0, self.game_data["stats"]["total_completed"] - 1)
+            self.save_game_data()
+            self.set_status(f"🔄 冒险已恢复：{task_to_restore.get('text', '')}（扣回 {restore_wisdom} 智慧）")
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            messagebox.showerror("操作出错", f"错误详情:\n{str(e)}")
     
     def delete_completed(self):
-        """Delete a completed task record"""
+        """Delete a completed task record with confirmation"""
         selection = self.completed_tree.selection()
         if not selection:
             messagebox.showwarning("警告", "请选择要删除的记录！")
             return
         
         task_id = int(selection[0])
+        # Find task info for confirmation
+        task_text = ""
+        task_wisdom = 0
+        task_completed = ""
+        for t in self.data["completed"]:
+            if t["id"] == task_id:
+                task_text = t.get("text", "")
+                task_wisdom = t.get("wisdom_gain", 0)
+                task_completed = t.get("completed", "")
+                break
+        
+        is_this_week = self.is_task_this_week(task_completed, self.game_data.get("week_start_date", ""))
+        if not messagebox.askyesno("确认删除",
+            f"🗑️ 确定要删除该已通关记录吗？\n\n冒险: {task_text}\n\n"
+            f"⚠️ 此操作将扣回 {task_wisdom} 智慧（历史总智慧同步减少），本周等级可能下降"):
+            return
+        
         self.data["completed"] = [t for t in self.data["completed"] if t["id"] != task_id]
         self.save_data()
         self.refresh_completed()
-        self.status_bar.config(text="✓ 记录已删除")
+        # 同步扣回智慧（本周任务同时扣 weekly，历史任务只扣 total）
+        self.subtract_wisdom(task_wisdom, task_wisdom if is_this_week else 0)
+        self.set_status(f"🗑️ 记录已删除，已扣回 {task_wisdom} 智慧")
     
     def delete_all_completed(self):
-        """Delete all completed task records"""
+        """Delete all completed task records with confirmation"""
         count = len(self.data["completed"])
         if count == 0:
-            self.status_bar.config(text="已完成列表为空，无需删除")
+            self.set_status("🏁 已通关列表为空，无需删除")
             return
+        
+        # 汇总扣回（本周任务计入 weekly，全部计入 total）
+        total_d = 0
+        weekly_d = 0
+        week_start = self.game_data.get("week_start_date", "")
+        for t in self.data["completed"]:
+            w = t.get("wisdom_gain", 0)
+            total_d += w
+            if self.is_task_this_week(t.get("completed", ""), week_start):
+                weekly_d += w
+        
+        if not messagebox.askyesno("确认删除全部", 
+            f"🗑️ 确定要删除全部 {count} 条已通关记录吗？\n\n"
+            f"⚠️ 此操作将扣回共 {total_d} 智慧（其中本周 {weekly_d}），本周等级可能下降\n此操作不可撤销！"):
+            return
+        
         self.data["completed"] = []
         self.save_data()
         self.refresh_completed()
         self.refresh_display()
+        # 同步扣回
+        self.subtract_wisdom(total_d, weekly_d)
+        self.set_status(f"🗑️ 已删除全部，共扣回 {total_d} 智慧")
     
     def export_completed(self):
         """Export all completed tasks to Excel file"""
         if not self.data["completed"]:
-            self.status_bar.config(text="已完成列表为空，无可导出的记录")
+            self.set_status("已完成列表为空，无可导出的记录")
             return
         
         now = datetime.now()
         iso_year, iso_week, _ = now.isocalendar()
+        
+        # If week filter is active, include week info in filename
+        selected_week = self.week_filter_var.get()
+        if selected_week and selected_week != "全部":
+            default_filename = f"{selected_week} 已通关冒险列表.xlsx"
+        else:
+            default_filename = f"{iso_year}年第{iso_week}周 已通关冒险列表.xlsx"
+        
         file_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel 文件", "*.xlsx"), ("所有文件", "*.*")],
-            title="导出已完成任务",
-            initialfile=f"{iso_year}年第{iso_week}周 已完成任务列表.xlsx"
+            title="📤 导出战绩",
+            initialfile=default_filename
         )
         if not file_path:
             return  # user cancelled
         
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "已完成任务"
+        ws.title = "🏁 已通关冒险"
         
         # ── Header style ──
         header_font = Font(name="Microsoft YaHei", bold=True, size=12, color="FFFFFF")
@@ -593,7 +2471,7 @@ class TodoApp:
         )
         
         # ── Write headers ──
-        headers = ["序号", "任务内容", "任务类别", "任务紧急程度", "责任人", "完成时间", "创建时间"]
+        headers = ["🔢 编号", "📝 冒险描述", "🗺️ 冒险类型", "⚡ 紧急等级", "⚔️ 冒险者", "🏷️ 标签", "🏁 通关时间", "📅 领取时间", "⏱️ 冒险时长"]
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_idx, value=header)
             cell.font = header_font
@@ -607,26 +2485,30 @@ class TodoApp:
         content_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
         
         for row_idx, task in enumerate(self.data["completed"], 2):
+            duration = self.calculate_duration(task.get("created", ""), task.get("completed", ""))
+            tags_str = ", ".join(task.get("tags", [])) if task.get("tags") else ""
             values = [
                 row_idx - 1,
                 task.get("text", ""),
                 task.get("category", ""),
                 task.get("priority", ""),
                 self.format_person(task.get("person", "")),
+                tags_str,  # Add tags
                 task.get("completed", ""),
-                task.get("created", "")
+                task.get("created", ""),
+                duration
             ]
             for col_idx, value in enumerate(values, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
                 cell.font = data_font
                 cell.border = thin_border
-                if col_idx == 2:  # 任务内容 - left align
+                if col_idx == 2:  # 📝 冒险描述 - left align
                     cell.alignment = content_align
                 else:
                     cell.alignment = data_align
         
         # ── Auto-fit column widths ──
-        col_widths_map = {1: 6, 2: 45, 3: 14, 4: 14, 5: 16, 6: 18, 7: 18}
+        col_widths_map = {1: 6, 2: 45, 3: 14, 4: 14, 5: 16, 6: 15, 7: 18, 8: 18, 9: 15}
         for col_idx, width in col_widths_map.items():
             ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = width
         
@@ -635,37 +2517,689 @@ class TodoApp:
         
         try:
             wb.save(file_path)
-            self.status_bar.config(text=f"✓ 导出成功: {os.path.basename(file_path)} ({len(self.data['completed'])} 条记录)")
+            self.set_status(f"✓ 导出成功: {os.path.basename(file_path)} ({len(self.data['completed'])} 条记录)")
         except Exception as e:
             messagebox.showerror("导出失败", f"保存文件失败:\n{str(e)}")
+    
+    # ── Timer Methods (Compact Timer) ──
+    def reset_timer(self):
+        """Reset timer to default time and stop."""
+        # Stop current timer if running
+        self.timer_running = False
+        self.timer_paused = False
+        
+        if self.timer_after_id:
+            self.root.after_cancel(self.timer_after_id)
+            self.timer_after_id = None
+        
+        # Reset to default time
+        self.timer_seconds = self.timer_default_seconds
+        self.timer_display_var.set(self.format_timer_display())
+        
+        # Reset button
+        self.timer_btn.config(text="▶ 开始", bg="#3498DB")
+    
+    def toggle_timer(self):
+        """Start or pause the timer."""
+        if self.timer_running and not self.timer_paused:
+            # Pause timer
+            self.timer_paused = True
+            self.timer_btn.config(text="▶ 继续", bg="#F39C12")
+            if self.timer_after_id:
+                self.root.after_cancel(self.timer_after_id)
+                self.timer_after_id = None
+        elif self.timer_running and self.timer_paused:
+            # Resume timer
+            self.timer_paused = False
+            self.timer_btn.config(text="⏸ 暂停", bg="#E74C3C")
+            self.update_timer()
+        else:
+            # Start timer
+            self.timer_running = True
+            self.timer_paused = False
+            self.timer_btn.config(text="⏸ 暂停", bg="#E74C3C")
+            self.update_timer()
+    
+    def update_timer(self):
+        """Update timer display and check if time's up."""
+        if self.timer_seconds <= 0:
+            # Time's up
+            self.timer_running = False
+            self.timer_paused = False
+            self.timer_btn.config(text="▶ 开始", bg="#3498DB")
+            self.timer_display_var.set("00:00")
+            
+            # Show different message based on timer duration
+            if self.timer_default_seconds <= 15 * 60:  # 5 or 15 minutes
+                messagebox.showinfo("⏰ 时间到！", "⏰ 番茄钟结束！该搬砖了~")
+            else:  # 25 or 30 minutes
+                messagebox.showinfo("⏰ 时间到！", "⏰ 番茄钟结束！休息一下吧~")
+            
+            # Reset to default time
+            self.timer_seconds = self.timer_default_seconds
+            self.timer_display_var.set(self.format_timer_display())
+            return
+        
+        # Update display
+        self.timer_display_var.set(self.format_timer_display())
+        
+        # Decrease seconds
+        self.timer_seconds -= 1
+        
+        # Schedule next update
+        self.timer_after_id = self.root.after(1000, self.update_timer)
+    
+    def format_timer_display(self):
+        """Format seconds to MM:SS display."""
+        minutes = self.timer_seconds // 60
+        seconds = self.timer_seconds % 60
+        return f"⏰ {minutes:02d}:{seconds:02d}"
+    
+    def set_timer(self, minutes):
+        """Set timer to specified minutes."""
+        # Stop current timer if running
+        if self.timer_running:
+            if self.timer_after_id:
+                self.root.after_cancel(self.timer_after_id)
+                self.timer_after_id = None
+            self.timer_running = False
+            self.timer_paused = False
+            self.timer_btn.config(text="▶ 开始", bg="#3498DB")
+        
+        # Set new time
+        self.timer_seconds = minutes * 60
+        self.timer_default_seconds = minutes * 60
+        self.timer_display_var.set(self.format_timer_display())
+    
+    def show_timer_menu(self, event):
+        """Show timer right-click menu to change time."""
+        self.timer_menu.post(event.x_root, event.y_root)
+    
+    def reload_data(self):
+        """Reload data from JSON file and refresh display."""
+        try:
+            self.data = self.load_data()
+            self.refresh_display()
+            self.set_status("✓ 数据已刷新")
+        except Exception as e:
+            messagebox.showerror("刷新失败", f"重新加载数据失败:\n{str(e)}")
+    
+    def focus_task_entry(self):
+        """Focus on task entry widget for quick task addition."""
+        try:
+            self.task_entry.focus_set()
+            self.set_status("🎯 请输入冒险描述...")
+        except Exception as e:
+            print(f"Error focusing task entry: {e}")
+    
+    def show_add_subtask_dialog(self, task):
+        """Show dialog to add a new subtask directly."""
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("🎯 接取新冒险")  # 原"➕ 添加支线任务"
+        dialog.geometry("400x210")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        # Don't use grab_set() to avoid focus issues
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        w = dialog.winfo_width()
+        h = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (w // 2)
+        y = (dialog.winfo_screenheight() // 2) - (h // 2)
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+        
+        f = tk.Frame(dialog, padx=20, pady=20)
+        f.pack(fill=tk.BOTH, expand=True)
+        
+        tk.Label(f, text="支线任务描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 8))
+
+        text_var = tk.StringVar()
+        entry = tk.Entry(f, font=self.font_entry, textvariable=text_var)
+        entry.pack(fill=tk.X, pady=(0, 12))
+        
+        # 标签（逗号分隔）
+        tk.Label(f, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tags_var = tk.StringVar()
+        tags_entry = tk.Entry(f, font=self.font_entry, textvariable=tags_var)
+        tags_entry.pack(fill=tk.X, pady=(0, 12))
+        # Use after() to ensure focus is set after dialog is fully created
+        entry.after(100, lambda: entry.focus_force())
+        
+        def save_subtask():
+            """Save the new subtask."""
+            text = text_var.get().strip()
+            if not text:
+                messagebox.showwarning("警告", "支线任务描述不能为空！")
+                return
+            
+            # 校验标签
+            tags_text = tags_var.get().strip()
+            is_valid, error_msg, tags = self.validate_tags(tags_text)
+            if not is_valid:
+                messagebox.showwarning("警告", error_msg)
+                return
+            
+            # Add subtask to task
+            if "subtasks" not in task:
+                task["subtasks"] = []
+            
+            new_subtask = {"id": len(task["subtasks"]) + 1, "text": text, "done": False,
+                          "tags": tags, "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            task["subtasks"].append(new_subtask)
+            
+            # Save data and refresh display
+            self.save_data()
+            self.refresh_display()
+            
+            # Close dialog
+            dialog.destroy()
+            
+            self.set_status("✓ 支线任务已添加！")
+        
+        # Buttons
+        bf = tk.Frame(f)
+        bf.pack(fill=tk.X)
+        
+        tk.Button(bf, text="✅ 保存", command=save_subtask,
+                  bg="#5CB85C", fg="white", font=self.font_button,
+                  cursor="hand2", padx=16, pady=4).pack(side=tk.RIGHT, padx=(8, 0))
+        
+        tk.Button(bf, text="取消", command=dialog.destroy,
+                  font=self.font_button,
+                  cursor="hand2", padx=16, pady=4).pack(side=tk.RIGHT)
+    
+    def manage_subtasks(self, task):
+        """Manage subtasks for a task."""
+        # ── Build subtasks management dialog ──
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"📋 管理支线任务 - {task['text'][:20]}...")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # --- Subtasks list ---
+        tk.Label(main_frame, text="📋 支线任务列表:", font=self.font_label).pack(anchor=tk.W, pady=(0, 8))
+        
+        # Listbox with scrollbar
+        list_frame = tk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 12))
+        
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        listbox = tk.Listbox(list_frame, font=self.font_entry, height=10,
+                              selectmode=tk.SINGLE, yscrollcommand=scrollbar.set)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+        
+        # Populate listbox
+        subtasks = task.get("subtasks", [])
+        for i, subtask in enumerate(subtasks):
+            text = subtask.get("text", "")
+            done = subtask.get("done", False)
+            prefix = "✓ " if done else "☐ "
+            listbox.insert(tk.END, f"{prefix}{text}")
+            if done:
+                listbox.itemconfig(i, fg="gray")
+        
+        # --- Buttons frame ---
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        def add_subtask():
+            """Add a new subtask."""
+            # Prompt for subtask text
+            subtask_dialog = tk.Toplevel(dialog)
+            subtask_dialog.title("➕ 添加支线任务")
+            subtask_dialog.geometry("400x210")
+            subtask_dialog.resizable(False, False)
+            subtask_dialog.transient(dialog)
+            # Don't use grab_set() to avoid focus issues
+            # subtask_dialog.grab_set()  # Commented out to fix input issue
+            
+            # Center the dialog
+            subtask_dialog.update_idletasks()
+            w = subtask_dialog.winfo_width()
+            h = subtask_dialog.winfo_height()
+            x = (subtask_dialog.winfo_screenwidth() // 2) - (w // 2)
+            y = (subtask_dialog.winfo_screenheight() // 2) - (h // 2)
+            subtask_dialog.geometry(f"{w}x{h}+{x}+{y}")
+            
+            f = tk.Frame(subtask_dialog, padx=20, pady=20)
+            f.pack(fill=tk.BOTH, expand=True)
+            
+            tk.Label(f, text="支线任务描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 8))
+
+            text_var = tk.StringVar()
+            entry = tk.Entry(f, font=self.font_entry, textvariable=text_var)
+            entry.pack(fill=tk.X, pady=(0, 12))
+            
+            # 标签（逗号分隔）
+            tk.Label(f, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+            tags_var = tk.StringVar()
+            tags_entry = tk.Entry(f, font=self.font_entry, textvariable=tags_var)
+            tags_entry.pack(fill=tk.X, pady=(0, 12))
+            # Use after() to ensure focus is set after dialog is fully created
+            entry.after(100, lambda: entry.focus_force())
+            
+            def save_subtask():
+                text = text_var.get().strip()
+                if not text:
+                    messagebox.showwarning("警告", "支线任务描述不能为空！")
+                    return
+                
+                # 校验标签
+                tags_text = tags_var.get().strip()
+                is_valid, error_msg, tags = self.validate_tags(tags_text)
+                if not is_valid:
+                    messagebox.showwarning("警告", error_msg)
+                    return
+                
+                # Add subtask
+                if "subtasks" not in task:
+                    task["subtasks"] = []
+                
+                new_subtask = {"id": len(task["subtasks"]) + 1, "text": text, "done": False,
+                              "tags": tags, "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                task["subtasks"].append(new_subtask)
+                
+                # Update listbox
+                listbox.insert(tk.END, f"☐ {text}")
+                
+                # Save data
+                self.save_data()
+                self.refresh_display()
+                
+                subtask_dialog.destroy()
+            
+            bf = tk.Frame(f)
+            bf.pack(fill=tk.X)
+            
+            tk.Button(bf, text="✅ 保存", command=save_subtask,
+                      bg="#5CB85C", fg="white", font=self.font_button,
+                      cursor="hand2", padx=16, pady=4).pack(side=tk.RIGHT, padx=(8, 0))
+            
+            tk.Button(bf, text="取消", command=subtask_dialog.destroy,
+                      font=self.font_button,
+                      cursor="hand2", padx=16, pady=4).pack(side=tk.RIGHT)
+        
+        def toggle_subtask():
+            """Toggle subtask done status."""
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("警告", "请选择要切换的支线任务！")
+                return
+            
+            index = selection[0]
+            if index < len(task.get("subtasks", [])):
+                subtask = task["subtasks"][index]
+                subtask["done"] = not subtask.get("done", False)
+                
+                # Update listbox
+                text = subtask.get("text", "")
+                done = subtask.get("done", False)
+                prefix = "✓ " if done else "☐ "
+                listbox.delete(index)
+                listbox.insert(index, f"{prefix}{text}")
+                if done:
+                    listbox.itemconfig(index, fg="gray")
+                else:
+                    listbox.itemconfig(index, fg="black")
+                
+                # Save data
+                self.save_data()
+                self.refresh_display()
+        
+        def delete_subtask():
+            """Delete selected subtask."""
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("警告", "请选择要删除的支线任务！")
+                return
+            
+            index = selection[0]
+            if index < len(task.get("subtasks", [])):
+                # Confirm deletion
+                if messagebox.askyesno("确认", "确定要删除这个支线任务吗？"):
+                    task["subtasks"].pop(index)
+                    
+                    # Update listbox
+                    listbox.delete(index)
+                    
+                    # Save data
+                    self.save_data()
+                    self.refresh_display()
+        
+        tk.Button(btn_frame, text="➕ 添加支线任务", command=add_subtask,
+                  bg="#5CB85C", fg="white", font=self.font_button,
+                  cursor="hand2", padx=12, pady=4).pack(side=tk.LEFT, padx=(0, 8))
+        
+        tk.Button(btn_frame, text="✓ 切换完成", command=toggle_subtask,
+                  bg="#F0AD4E", fg="white", font=self.font_button,
+                  cursor="hand2", padx=12, pady=4).pack(side=tk.LEFT, padx=(0, 8))
+        
+        tk.Button(btn_frame, text="🗑 删除支线任务", command=delete_subtask,
+                  bg="#D9534F", fg="white", font=self.font_button,
+                  cursor="hand2", padx=12, pady=4).pack(side=tk.LEFT)
+        
+        # --- Close button ---
+        tk.Button(main_frame, text="关闭", command=dialog.destroy,
+                  font=self.font_button,
+                  cursor="hand2", padx=20, pady=4).pack(pady=(8, 0))
+    
+    def show_add_task_dialog(self):
+        """Show dialog to add a new task with all fields."""
+        # ── Build add task dialog ──
+        dialog = tk.Toplevel(self.root)
+        dialog.title("🎯 领取新冒险")
+        dialog.geometry("520x450")  # Increased height to show all fields
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+        
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # --- 📝 冒险描述 ---
+        tk.Label(main_frame, text="📝 冒险描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        text_var = tk.StringVar()
+        text_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=text_var)
+        text_entry.pack(fill=tk.X, pady=(0, 14))
+        text_entry.focus_set()
+        
+        # --- 🗺️ 冒险类型 & ⚡ 紧急等级 ---
+        row_frame = tk.Frame(main_frame)
+        row_frame.pack(fill=tk.X, pady=(0, 14))
+        
+        g1 = tk.Frame(row_frame)
+        g1.pack(side=tk.LEFT, padx=(0, 20))
+        tk.Label(g1, text="🗺️ 冒险类型:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        category_var = tk.StringVar(value=self.category_options[0])
+        category_combo = ttk.Combobox(g1, textvariable=category_var,
+                                      values=self.category_options,
+                                      state='readonly', width=16, font=self.font_entry)
+        category_combo.pack()
+        
+        g2 = tk.Frame(row_frame)
+        g2.pack(side=tk.LEFT)
+        tk.Label(g2, text="⚡ 紧急等级:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        priority_var = tk.StringVar(value=self.priority_options[0])
+        priority_combo = ttk.Combobox(g2, textvariable=priority_var,
+                                      values=self.priority_options,
+                                      state='readonly', width=16, font=self.font_entry)
+        priority_combo.pack()
+        
+        # --- ⚔️ 冒险者 ---
+        tk.Label(main_frame, text="⚔️ 冒险者:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        person_var = tk.StringVar(value="韦程")
+        person_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=person_var)
+        person_entry.pack(fill=tk.X, pady=(0, 14))
+        
+        # --- 🏷️ 标签 ---
+        tk.Label(main_frame, text="🏷️ 标签: (逗号分隔)", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tags_var = tk.StringVar()
+        tags_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=tags_var)
+        tags_entry.pack(fill=tk.X, pady=(0, 18))
+        
+        # --- Buttons ---
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X)
+        
+        def save_new_task():
+            """Save the new task"""
+            task_text = text_var.get().strip()
+            if not task_text:
+                messagebox.showwarning("警告", "🎯 请输入冒险描述！")
+                return
+            
+            # Process tags
+            tags_text = tags_var.get().strip()
+            tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()] if tags_text else []
+            
+            # Calculate new task ID
+            all_tasks = self.data["tasks"] + self.data["completed"]
+            all_ids = [t["id"] for t in all_tasks if "id" in t]
+            new_id = max(all_ids) + 1 if all_ids else 1
+            
+            # Get person
+            person_val = person_var.get().strip()
+            if not person_val:
+                person_val = "韦程"
+            
+            # Create new task
+            task = {
+                "id": new_id,
+                "text": task_text,
+                "priority": priority_var.get(),
+                "category": category_var.get(),
+                "person": person_val,
+                "tags": tags,
+                "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            self.data["tasks"].append(task)
+            self.save_data()
+            self.refresh_display()
+            self.set_status(f"🎯 冒险已领取：{task_text}")
+            dialog.destroy()
+        
+        tk.Button(btn_frame, text="✅ 领取冒险", command=save_new_task,
+                  bg="#4F81BD", fg="white", font=self.font_button,
+                  cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT, padx=(10, 0))
+        
+        tk.Button(btn_frame, text="取消", command=dialog.destroy,
+                  font=self.font_button,
+                  cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT)
+        self._apply_emoji_images(dialog)
+    
+    def auto_resize_columns(self, tree):
+        """Auto-resize columns based on content and header text."""
+        try:
+            # Get font metrics - use the font defined in Style
+            style = ttk.Style()
+            font_name = style.lookup("Treeview", "font")
+            if font_name:
+                font = tkFont.Font(font=font_name)
+            else:
+                font = tkFont.Font(family="Microsoft YaHei", size=12)
+            
+            for col in tree['columns']:
+                # Skip checkbox column and "🗺️冒险类型" column - use fixed width
+                if col == '☑️':
+                    tree.column(col, width=40)
+                    continue
+                if '冒险类型' in col:
+                    tree.column(col, width=135)
+                    continue
+                
+                # Calculate max width from content
+                max_width = 0
+                
+                # Check header text width
+                header_text = tree.heading(col, 'text')
+                header_width = font.measure(header_text) + 20  # Add padding
+                max_width = max(max_width, header_width)
+                
+                # Check each row's content width
+                for item in tree.get_children():
+                    cell_value = str(tree.item(item, 'values')[tree['columns'].index(col)])
+                    cell_width = font.measure(cell_value) + 20  # Add padding
+                    max_width = max(max_width, cell_width)
+                
+                # Set minimum and maximum width limits
+                min_width = 50
+                max_allowed_width = 500 if '描述' in header_text or 'description' in col.lower() else 300
+                
+                final_width = max(min_width, min(max_width, max_allowed_width))
+                
+                # Apply width to column
+                tree.column(col, width=final_width)
+        except Exception as e:
+            print(f"Warning: Could not auto-resize columns: {e}")
     
     def refresh_display(self):
         """Refresh the display"""
         self.refresh_pending()
         self.refresh_completed()
         self.refresh_stats()
-        self.status_bar.config(text=f"就绪 | 待完成: {len(self.data['tasks'])} | 已完成: {len(self.data['completed'])}")
+        # 刷新后立即更新成长系统显示（每周智慧系统面板）
+        self.update_game_display()
     
     def refresh_pending(self):
-        """Refresh pending tasks display"""
+        """Refresh pending tasks display - sorted by selected criteria"""
         self.pending_tree.delete(*self.pending_tree.get_children())
         
-        for display_id, task in enumerate(self.data["tasks"], 1):
+        # Get sorting criteria
+        criteria = self.sort_criteria.get()
+        
+        # Sort tasks based on criteria
+        if criteria == "默认顺序":
+            # 优先级排序：红色警报 > 修炼升级 > 临时密令 > 佛系摸鱼
+            priority_order = {
+                "红色警报": 1,
+                "修炼升级": 2,
+                "临时密令": 3,
+                "佛系摸鱼": 4
+            }
+            sorted_tasks = sorted(self.data["tasks"], 
+                               key=lambda t: priority_order.get(t.get("priority", ""), 999))
+        elif criteria == "按紧急程度":
+            # 按紧急程度排序（同默认顺序）
+            priority_order = {
+                "红色警报": 1,
+                "修炼升级": 2,
+                "临时密令": 3,
+                "佛系摸鱼": 4
+            }
+            sorted_tasks = sorted(self.data["tasks"], 
+                               key=lambda t: priority_order.get(t.get("priority", ""), 999))
+        elif criteria == "按创建时间":
+            # 按创建时间排序（新到旧）
+            sorted_tasks = sorted(self.data["tasks"], 
+                               key=lambda t: t.get("created", ""), reverse=True)
+        elif criteria == "按任务描述":
+            # 按任务描述排序（A-Z）
+            sorted_tasks = sorted(self.data["tasks"], 
+                               key=lambda t: t.get("text", "").lower())
+        else:
+            # 默认：按ID排序
+            sorted_tasks = self.data["tasks"]
+        
+        # Filter by search query
+        query = self.search_query.get().strip().lower()
+        if query:
+            filtered_tasks = []
+            for task in sorted_tasks:
+                # Search in: description, person, category, priority, tags
+                text = task["text"].lower()
+                person = self.format_person(task.get("person", "")).lower()
+                category = task.get("category", "").lower()
+                priority = task.get("priority", "").lower()
+                tags = ", ".join(task.get("tags", [])).lower()
+                
+                if query in text or query in person or query in category or query in priority or query in tags:
+                    filtered_tasks.append(task)
+            sorted_tasks = filtered_tasks
+        
+        for display_id, task in enumerate(sorted_tasks, 1):
+            # Format tags for display
+            tags = task.get("tags", [])
+            tags_str = ", ".join(tags) if tags else ""
+            
+            # Calculate progress
+            subtasks = task.get("subtasks", [])
+            total = len(subtasks)
+            done = sum(1 for st in subtasks if st.get("done", False))
+            progress = f"{done}/{total}" if total > 0 else "─"
+            
+            # Insert main task row
             item = self.pending_tree.insert('', tk.END, iid=str(task["id"]), values=(
+                '☐',  # 复选框列 - 未选中
                 display_id,
                 task["text"],
                 task.get("category", ""),
                 task.get("priority", ""),
                 self.format_person(task.get("person", "")),
+                tags_str,  # Display tags
+                progress,  # Display progress
                 task["created"]
             ))
             
             priority = task.get("priority", "")
             if priority in self.priority_colors:
-                self.pending_tree.item(item, tags=(priority,))
+                self.pending_tree.item(item, tags=('main', priority,))
+            
+            # Insert subtask rows directly below main task
+            for subtask_idx, subtask in enumerate(subtasks, 1):
+                subtask_id = f"{task['id']}_subtask_{subtask_idx}"
+                subtask_display_id = f"{display_id}.{subtask_idx}"
+                subtask_text = subtask.get("text", "")
+                subtask_done = subtask.get("done", False)
+                
+                # Apply strikethrough for completed subtasks（层级由 tree 缩进承担，不再额外加空格）
+                if subtask_done:
+                    subtask_display_text = self.strikethrough(subtask_text)
+                else:
+                    subtask_display_text = subtask_text
+                
+                # 支线标签与领取时间
+                subtask_tags = subtask.get("tags", [])
+                subtask_tags_str = ", ".join(subtask_tags) if subtask_tags else ""
+                subtask_created = subtask.get("created", "")
+                
+                # Add subtask row（挂到主线 item 下，形成树形层级）
+                subtask_item = self.pending_tree.insert(item, tk.END, iid=subtask_id, values=(
+                    '☑️' if subtask_done else '☐',  # Subtask checkbox
+                    subtask_display_id,  # Subtask ID (e.g., "1.1", "1.2")
+                    subtask_display_text,  # Indented subtask text (with strikethrough if done)
+                    "",  # No category for subtasks
+                    "",  # No priority for subtasks
+                    "",  # No person for subtasks
+                    subtask_tags_str,  # 支线标签
+                    "✓" if subtask_done else "─",  # Subtask status
+                    subtask_created  # 领取时间
+                ))
+                
+                # Apply gray background for completed subtasks
+                if subtask_done:
+                    self.pending_tree.item(subtask_item, tags=('subtask_done',))
+                else:
+                    self.pending_tree.item(subtask_item, tags=('subtask',))
+
+            # 树形层级默认全部展开（支线默认可见，由用户点三角手动收起；无支线主线为叶子不影响）
+            self.pending_tree.item(item, open=True)
         
         for priority, color in self.priority_colors.items():
             self.pending_tree.tag_configure(priority, background=color)
+        
+        # Configure subtask tags
+        self.pending_tree.tag_configure('subtask', background='#F5F5F5')  # Light gray for subtasks
+        self.pending_tree.tag_configure('subtask_done', background='#E8E8E8', foreground='gray')  # Darker gray for completed subtasks
+        
+        # Auto-resize columns based on content
+        self.auto_resize_columns(self.pending_tree)
     
     def refresh_completed(self):
         """Refresh completed tasks display"""
@@ -685,33 +3219,102 @@ class TodoApp:
         self.filter_completed()
     
     def filter_completed(self):
-        """Filter completed tasks by date"""
+        """Filter completed tasks by date, sorted by completion time (newest first)"""
         self.completed_tree.delete(*self.completed_tree.get_children())
         
         selected_date = self.date_filter.get()
-        display_id = 0
         
+        # 过滤并排序
+        filtered_tasks = []
         for task in self.data["completed"]:
             if "completed" in task:
                 task_date = task["completed"].split()[0]
-                
                 if selected_date == '全部' or task_date == selected_date:
-                    display_id += 1
-                    item = self.completed_tree.insert('', tk.END, iid=str(task["id"]), values=(
-                        display_id,
-                        task["text"],
-                        task.get("category", ""),
-                        task.get("priority", ""),
-                        self.format_person(task.get("person", "")),
-                        task["completed"]
-                    ))
-                    
-                    priority = task.get("priority", "")
-                    if priority in self.priority_colors:
-                        self.completed_tree.item(item, tags=(priority,))
+                    filtered_tasks.append(task)
         
-        for priority, color in self.priority_colors.items():
-            self.completed_tree.tag_configure(priority, background=color)
+        # Filter by search query
+        query = self.search_query.get().strip().lower()
+        if query:
+            filtered_tasks2 = []
+            for task in filtered_tasks:
+                # Search in: description, person, category, priority, tags
+                text = task["text"].lower()
+                person = self.format_person(task.get("person", "")).lower()
+                category = task.get("category", "").lower()
+                priority = task.get("priority", "").lower()
+                tags = ", ".join(task.get("tags", [])).lower()
+                
+                if query in text or query in person or query in category or query in priority or query in tags:
+                    filtered_tasks2.append(task)
+            filtered_tasks = filtered_tasks2
+        
+        # Sort based on criteria
+        criteria = self.sort_criteria.get()
+        if criteria == "默认顺序" or criteria == "按通关时间":
+            # 按完成时间倒序排列(最新的在前面)
+            filtered_tasks.sort(key=lambda t: t.get("completed", ""), reverse=True)
+        elif criteria == "按紧急程度":
+            # 按紧急程度排序
+            priority_order = {
+                "红色警报": 1,
+                "修炼升级": 2,
+                "临时密令": 3,
+                "佛系摸鱼": 4
+            }
+            filtered_tasks.sort(key=lambda t: priority_order.get(t.get("priority", ""), 999))
+        elif criteria == "按创建时间":
+            # 按创建时间排序（新到旧）
+            filtered_tasks.sort(key=lambda t: t.get("created", ""), reverse=True)
+        elif criteria == "按任务描述":
+            # 按任务描述排序（A-Z）
+            filtered_tasks.sort(key=lambda t: t.get("text", "").lower())
+        else:
+            # 默认：按完成时间倒序
+            filtered_tasks.sort(key=lambda t: t.get("completed", ""), reverse=True)
+        
+        # 获取今天日期
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        for display_id, task in enumerate(filtered_tasks, 1):
+            duration = self.calculate_duration(task.get("created", ""), task["completed"])
+            # 应用删除线效果
+            task_text = self.strikethrough(task["text"])
+            
+            # Format tags for display
+            tags = task.get("tags", [])
+            tags_str = ", ".join(tags) if tags else ""
+            
+            # Calculate progress
+            subtasks = task.get("subtasks", [])
+            total = len(subtasks)
+            done = sum(1 for st in subtasks if st.get("done", False))
+            progress = f"{done}/{total}" if total > 0 else "─"
+            
+            # Insert main task row
+            item = self.completed_tree.insert('', tk.END, iid=str(task["id"]), values=(
+                '☑️',  # 复选框列 - 已选中
+                display_id,
+                task_text,
+                task.get("category", ""),
+                task.get("priority", ""),
+                self.format_person(task.get("person", "")),
+                tags_str,  # Display tags
+                progress,  # Display progress
+                task["completed"],
+                duration
+            ))
+            
+            # 判断是否是当天完成,设置不同背景色
+            task_date = task["completed"].split()[0]
+            if task_date == today:
+                # 当天完成:深灰色
+                self.completed_tree.item(item, tags=('completed_today',))
+            else:
+                # 超过1天:浅灰色
+                self.completed_tree.item(item, tags=('completed_old',))
+        
+        # Auto-resize columns based on content
+        self.auto_resize_columns(self.completed_tree)
     
     # ──────────────────────────────────────────────
     #  STATISTICS — Table-based, week-aware
@@ -736,8 +3339,16 @@ class TodoApp:
             w = self._date_to_week(t.get("completed", ""))
             if w:
                 weeks_set.add(w)
-        self._all_weeks = sorted(weeks_set, reverse=True)
-        options = ["全部"] + [f"{y}年第{w}周" for y, w in self._all_weeks]
+        # 当前周（即使本周暂无任务也确保出现在下拉首位）
+        now = datetime.now()
+        iso = now.isocalendar()
+        cur_key = (iso[0], iso[1])
+        weeks_set.add(cur_key)
+        # 当前周置顶，其余周按时间倒序（最近的在前）
+        others = sorted((w for w in weeks_set if w != cur_key), reverse=True)
+        self._all_weeks = [cur_key] + others
+        cur_label = f"{cur_key[0]}年第{cur_key[1]}周"
+        options = [cur_label] + [f"{y}年第{w}周" for y, w in others] + ["全部"]
         self.week_filter_combo['values'] = options
         if not self.week_filter_var.get() or self.week_filter_var.get() not in options:
             self.week_filter_var.set(options[0] if options else "全部")
@@ -749,7 +3360,6 @@ class TodoApp:
         selected = self.week_filter_var.get()
         if selected == "全部":
             return tasks
-        import re
         m = re.match(r"(\d+)年.*?(\d+)周", selected)
         if not m:
             return tasks
@@ -760,6 +3370,50 @@ class TodoApp:
             if w and w[0] == year_filter and w[1] == week_filter:
                 result.append(t)
         return result
+
+    def _update_clock(self):
+        """刷新战绩页「选择周」右侧的实时时钟（描边幽灵牌），每秒一次"""
+        now = datetime.now()
+        weekday_cn = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'][now.weekday()]
+        text = f"{now.year}年{now.month:02d}月{now.day:02d}日 {weekday_cn}  {now.hour:02d}：{now.minute:02d}：{now.second:02d}"
+        if getattr(self, 'clock_text', None):
+            self.clock_text.config(text=text)
+        if getattr(self, 'clock_canvas', None):
+            self._draw_clock(self.clock_canvas, now)
+        self.root.after(1000, self._update_clock)
+
+    def _draw_clock(self, canvas, now):
+        """在 16x16 Canvas 上绘制蓝色线条时钟（圆 + 时分秒针），颜色与描边同色"""
+        canvas.delete("all")
+        cx, cy, r = 8, 8, 6
+        canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="#4F81BD", width=1.5)
+        # 指针角度：12 点方向为 0，顺时针。Tk 的 y 轴向下，故 y 取负
+        sec = now.second / 60.0
+        minute = (now.minute + now.second / 60.0) / 60.0
+        hour = ((now.hour % 12) + now.minute / 60.0) / 12.0
+        # 秒针（蓝，细）
+        sx = cx + (r - 1) * math.sin(sec * 2 * math.pi)
+        sy = cy - (r - 1) * math.cos(sec * 2 * math.pi)
+        canvas.create_line(cx, cy, sx, sy, fill="#4F81BD", width=1)
+        # 分针（深蓝，中）
+        mx = cx + (r - 2) * math.sin(minute * 2 * math.pi)
+        my = cy - (r - 2) * math.cos(minute * 2 * math.pi)
+        canvas.create_line(cx, cy, mx, my, fill="#2C3E50", width=1.2)
+        # 时针（深蓝，粗）
+        hx = cx + (r - 3) * math.sin(hour * 2 * math.pi)
+        hy = cy - (r - 3) * math.cos(hour * 2 * math.pi)
+        canvas.create_line(cx, cy, hx, hy, fill="#2C3E50", width=1.4)
+
+    def _on_resize(self, event):
+        """窗口尺寸变化回调（V1.6.18）：仅当『从最大化→还原』这一跳变时，
+        强制锁回首开基准尺寸 self.window_home，保证还原后与小窗口首开一致；
+        手动拖拽缩放不受影响。"""
+        if event.widget is not self.root:
+            return  # 忽略子控件尺寸变化冒泡上来的 Configure 事件
+        st = self.root.wm_state()
+        if self._prev_state == "zoomed" and st == "normal":
+            self.root.geometry(self.window_home)
+        self._prev_state = st
 
     def refresh_stats(self):
         """Refresh statistics tab data, filtered by selected week"""
@@ -775,7 +3429,11 @@ class TodoApp:
         
         self.stat_pending.set(str(total_pending))
         self.stat_completed.set(str(total_completed))
-        self.stat_rate.set(f"{total_completed / total_all * 100:.1f}%" if total_all > 0 else "0%")
+        if total_all > 0:
+            rate = total_completed / total_all * 100
+            self.stat_rate.set(f"{rate:.1f}%")
+        else:
+            self.stat_rate.set("暂无数据")
         
         # ── By priority ──
         self.stat_priority_tree.delete(*self.stat_priority_tree.get_children())
@@ -796,20 +3454,47 @@ class TodoApp:
                 self.stat_category_tree.insert('', tk.END, values=(cat, p, c, total))
         
         # ── By date ──
-        self.stat_date_tree.delete(*self.stat_date_tree.get_children())
-        date_counts = {}
+        self._stat_date_counts = {}
         for t in filtered_completed:
             d = t.get("completed", "").split()[0]
-            date_counts[d] = date_counts.get(d, 0) + 1
-        for date in sorted(date_counts.keys(), reverse=True):
-            self.stat_date_tree.insert('', tk.END, values=(date, date_counts[date]))
-
+            self._stat_date_counts[d] = self._stat_date_counts.get(d, 0) + 1
+        # 填充下拉选项
+        dates = sorted(self._stat_date_counts.keys(), reverse=True)
+        self.stat_date_filter['values'] = ['全部'] + dates
+        if not self.stat_date_filter.get() or self.stat_date_filter.get() not in (['全部'] + dates):
+            self.stat_date_filter.set('全部')
+        # 按选中日期刷新表格
+        self._refresh_stat_date()
+        
+    def _refresh_stat_date(self):
+        """按下拉选中的日期刷新『按日期统计（已通关）』表格"""
+        self.stat_date_tree.delete(*self.stat_date_tree.get_children())
+        if not hasattr(self, '_stat_date_counts'):
+            return
+        sel = self.stat_date_filter.get() if self.stat_date_filter.get() else '全部'
+        if sel == '全部':
+            for date in sorted(self._stat_date_counts.keys(), reverse=True):
+                self.stat_date_tree.insert('', tk.END,
+                                           values=(date, self._stat_date_counts[date]))
+        else:
+            self.stat_date_tree.insert('', tk.END,
+                                       values=(sel, self._stat_date_counts.get(sel, 0)))
 
 def main():
+    # Check if another instance is already running
+    if is_already_running():
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning(
+            "提示",
+            "TodoList 已经在运行中！\n\n请勿同时打开多个窗口，以免造成数据混乱。"
+        )
+        root.destroy()
+        sys.exit(0)
+    
     root = tk.Tk()
     app = TodoApp(root)
     root.mainloop()
-
 
 if __name__ == "__main__":
     main()
