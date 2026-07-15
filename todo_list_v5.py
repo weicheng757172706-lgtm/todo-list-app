@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.3"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.6.22→规范进位V1.8.2，本版V1.8.3；列布局方案B(除冒险描述外列钉死)/窗口还原锁回900x650等保留
+VERSION = "V1.8.4"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.6.22→规范进位V1.8.2，V1.8.3 首版，本版 V1.8.4 修复 daily_summary.txt 摘要不准（路径错配+保存失败仍同步）；列布局方案B/窗口还原锁回900x650等保留
 
 import json
 import os
@@ -213,6 +213,9 @@ class TodoApp:
         
         # Load data
         self.data = self.load_data()
+        self._data_loaded = True
+        # 打开即刷新「今日已完成 + 进行中」摘要，确保 daily_summary 反映真实数据
+        self.sync_daily_summary()
         
         # Timer variables (compact timer in pending tab)
         self.timer_running = False
@@ -1112,21 +1115,21 @@ class TodoApp:
             
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
+            # 仅当数据成功落盘后再同步摘要，避免保存失败却写出（可能不完整的）摘要
+            self.sync_daily_summary()
         except Exception as e:
             print(f"Error saving data: {e}")
             messagebox.showerror("错误", f"保存数据失败:\n{str(e)}")
-        
-        # 同步「今日已完成 + 进行中」到 daily_summary.txt（省 token 快速汇报用），失败不影响主保存
-        self.sync_daily_summary()
     
     def sync_daily_summary(self):
         """将「今日已完成 + 进行中」同步写入 daily_summary.txt（UTF-8 无 BOM），供快速汇报省 token。
         在 save_data 末尾自动调用；只写不读，异常仅打印不影响主程序。
         今日已完成 = completed 字段日期为今天的任务（含其下已完成支线）；
         进行中 = 当前 pending 任务（含其下未完成支线）。"""
+        if not getattr(self, '_data_loaded', False):
+            return
         try:
-            summary_path = os.path.join(os.path.expanduser('~'), 'Documents',
-                                        'TodoList_App', 'daily_summary.txt')
+            summary_path = os.path.join(os.path.dirname(self.data_file), 'daily_summary.txt')
             today = datetime.now().strftime('%Y-%m-%d')
 
             done_lines = []
