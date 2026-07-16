@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.8"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.7 界面文案+成长级别主题化；V1.8.8 将「优先级档位名/类型选项/旧名迁移映射」也主题化（与档位名解耦：经验值·颜色·排序权重·加粗tag 按位置索引），清单套档位改为「重要紧急/重要不紧急/不重要紧急/不重要不紧急」、类型改为「工作任务/每日成长任务」、列标题紧急程度；双剑套保持原冒险档位不变
+VERSION = "V1.8.9"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.8 清单套tab/卡片改名+主题化收尾；V1.8.9 代码审查优化——修复 validate_person_name 崩溃、移除已取消的彩色 emoji 死代码、删除与钉死列宽冲突的 auto_resize、合并 load_data 重复落盘、抽离 _complete_task_by_id 去重、清理冗余 import 与死方法
 
 import json
 import os
@@ -16,24 +16,12 @@ import re
 import socket
 import shutil
 from datetime import datetime, date, timedelta
-import calendar
 import math
+import random
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import tkinter.font as tkFont
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-
-# Pillow（彩色 emoji 图片化，绕过 Tkinter 把 emoji 当单色字形染色的限制）
-try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk
-except Exception:
-    Image = ImageDraw = ImageFont = ImageTk = None
-
-# ── 彩色图标方案回退开关（韦老板 2026-07-08 确认：彩色小图标观感不达标，取消显示）──
-# 强制置空后，所有 _emoji_image 返回 None，各控件经既有 `if ImageTk is None` 守卫
-# 自动回退为 Tk 原生灰色文本 emoji，行为与灰版 V1.6.9_gray 一致。
-Image = ImageDraw = ImageFont = ImageTk = None
 
 # ══════════════════════════════════════════════════════════════
 # 主题系统（多套主题架构：单引擎 + theme.json 配置）
@@ -220,15 +208,6 @@ def is_already_running():
     except socket.error:
         return True
 
-# 智慧奖励映射（V1.6.2：与当前优先级命名保持一致）
-# 红色警报=重要紧急(+20) | 修炼升级=重要不紧急(+20) | 临时密令=不重要紧急(+10) | 佛系摸鱼=不重要不紧急(+5)
-WISDOM_BY_PRIORITY = {
-    "红色警报": 20,
-    "修炼升级": 20,
-    "临时密令": 10,
-    "佛系摸鱼": 5,
-}
-
 class TodoApp:
 
     @staticmethod
@@ -268,8 +247,7 @@ class TodoApp:
         
         return True, ""
     
-    @staticmethod
-    def validate_person_name(person):
+    def validate_person_name(self, person):
         """Validate person name.
         Returns: (is_valid, error_message)
         """
@@ -438,12 +416,11 @@ class TodoApp:
                     if "completed" not in data:
                         data["completed"] = []
 
-                    # 迁移旧版分类名称（v9.0 改为冒险主题风格）
+                    # 统一迁移：分类/优先级/标签/支线，避免重复循环与重复落盘
                     category_map = THEME['legacy_category_map']
-                    # 迁移旧版优先级名称（v8.8 改为新版本）
                     priority_map = THEME['legacy_priority_map']
                     migrated = False
-                    for task in data["tasks"]:
+                    for task in data["tasks"] + data["completed"]:
                         old_cat = task.get("category", "")
                         if old_cat in category_map:
                             task["category"] = category_map[old_cat]
@@ -452,64 +429,21 @@ class TodoApp:
                         if old_pri in priority_map:
                             task["priority"] = priority_map[old_pri]
                             migrated = True
-                    for task in data["completed"]:
-                        old_cat = task.get("category", "")
-                        if old_cat in category_map:
-                            task["category"] = category_map[old_cat]
-                            migrated = True
-                        old_pri = task.get("priority", "")
-                        if old_pri in priority_map:
-                            task["priority"] = priority_map[old_pri]
-                            migrated = True
-                    
-                    # 迁移 tags 字段（v10.11 新增标签功能）
-                    tags_migrated = False
-                    for task in data["tasks"]:
                         if "tags" not in task:
                             task["tags"] = []
-                            tags_migrated = True
-                    for task in data["completed"]:
-                        if "tags" not in task:
-                            task["tags"] = []
-                            tags_migrated = True
-                    if tags_migrated:
-                        # 静默保存迁移后的数据
-                        try:
-                            if os.path.exists(self.data_file):
-                                shutil.copy2(self.data_file, self.data_file + '.bak')
-                            with open(self.data_file, 'w', encoding='utf-8') as f:
-                                json.dump(data, f, ensure_ascii=False, indent=2)
-                        except Exception:
-                            pass
-                    
-                    # 迁移 subtasks 字段（v10.19 新增支线任务功能）
-                    subtasks_migrated = False
-                    for task in data["tasks"]:
+                            migrated = True
                         if "subtasks" not in task:
                             task["subtasks"] = []
-                            subtasks_migrated = True
-                    for task in data["completed"]:
-                        if "subtasks" not in task:
-                            task["subtasks"] = []
-                            subtasks_migrated = True
-                    if subtasks_migrated:
-                        # 静默保存迁移后的数据
-                        try:
-                            if os.path.exists(self.data_file):
-                                shutil.copy2(self.data_file, self.data_file + '.bak')
-                            with open(self.data_file, 'w', encoding='utf-8') as f:
-                                json.dump(data, f, ensure_ascii=False, indent=2)
-                        except Exception:
-                            pass
-                    
+                            migrated = True
+
                     # 回补 wisdom_gain（V1.6.1 之前完成的任务未记录该字段，
                     # 会导致删除/恢复时已通关任务无法正确扣回本周智慧）— V1.6.2
                     for task in data["completed"]:
                         if "wisdom_gain" not in task:
                             task["wisdom_gain"] = self.WISDOM_BY_PRIORITY.get(task.get("priority", ""), 5)
 
-                    if migrated or tags_migrated or subtasks_migrated:
-                        # 静默保存迁移后的数据，不弹窗
+                    # 仅当确有字段迁移/补值时统一落盘一次（避免无变化时也写文件）
+                    if migrated:
                         try:
                             if os.path.exists(self.data_file):
                                 shutil.copy2(self.data_file, self.data_file + '.bak')
@@ -697,190 +631,31 @@ class TodoApp:
         if not completed_str or not week_start_date:
             return False
         try:
-            from datetime import datetime, date, timedelta
             cd = datetime.strptime(completed_str, "%Y-%m-%d %H:%M:%S")
             cm = (cd - timedelta(days=cd.weekday())).strftime("%Y-%m-%d")
             return cm == week_start_date
         except Exception:
             return False
     
-    # ──────────────────────────────────────────────
-    # 彩色 emoji 图片化（方案A：绕过 Tkinter 单色字形渲染）
-    # ──────────────────────────────────────────────
-    EMOJI_CHARS = (
-        '⚔️','🏆','🏁','⚡','🗺️','🏷️','📝','📊','📅','🚀','🎉',
-        '✏️','🗑️','🗑','⚠️','⏱️','⏰','🔢','☑️','☐','🧠','⭐','👑','🎯','🎮','♾️',
-        '✅','🔄',
-    )
-
-    def _find_emoji_font(self):
-        for p in (r"C:/Windows/Fonts/seguiemj.ttf",
-                  r"C:/Windows/Fonts/NotoColorEmoji.ttf"):
-            if os.path.exists(p):
-                return p
-        return None
-
-    def _emoji_font_for(self, size):
-        if Image is None or self._emoji_font_path is None:
-            return None
-        if size not in self._emoji_fonts:
-            try:
-                self._emoji_fonts[size] = ImageFont.truetype(self._emoji_font_path, size)
-            except Exception:
-                self._emoji_fonts[size] = None
-        return self._emoji_fonts[size]
-
-    def _emoji_image(self, char, size=18):
-        """渲染单个 emoji 为彩色 PhotoImage（带透明边、按 size 缩放、缓存）。
-
-        采用 4 倍超采样渲染后再 LANCZOS 缩回目标尺寸，避免小尺寸下发虚/发糊。
-        渲染成本只在首次调用时发生并缓存，无运行时开销。
-        """
-        if ImageTk is None:
-            return None
-        key = (char, size)
-        if key in self._emoji_cache:
-            return self._emoji_cache[key]
-        img = None
-        SS = 4  # 超采样倍率：越大越锐利（仅影响启动渲染）
-        font = self._emoji_font_for(size * SS)
-        if font is not None:
-            try:
-                pad = max(2, size // 4)
-                canvas = Image.new("RGBA",
-                                   (size * SS + pad * 2, size * SS + pad * 2),
-                                   (0, 0, 0, 0))
-                d = ImageDraw.Draw(canvas)
-                d.text((pad, pad), char, font=font, embedded_color=True)
-                bbox = canvas.getbbox()
-                if bbox:
-                    canvas = canvas.crop(bbox)
-                w, h = canvas.size
-                if h > 0:
-                    scale = size / float(h)
-                    canvas = canvas.resize((max(1, int(w * scale)), max(1, int(h * scale))),
-                                           Image.LANCZOS)
-                img = ImageTk.PhotoImage(canvas)
-            except Exception:
-                img = None
-        self._emoji_cache[key] = img
-        return img
-
-    @staticmethod
-    def _split_leading_emoji(s):
-        if not s:
-            return None, s
-        for e in TodoApp.EMOJI_CHARS:
-            if s.startswith(e):
-                rest = s[len(e):]
-                if rest.startswith(' '):
-                    rest = rest[1:]
-                return e, rest
-        return None, s
-
-    @staticmethod
-    def _label_font_size(widget):
-        try:
-            f = widget.cget("font")
-        except Exception:
-            return 16
-        if isinstance(f, (tuple, list)) and len(f) >= 2:
-            try:
-                return int(f[1])
-            except Exception:
-                return 16
-        if hasattr(f, "cget"):
-            try:
-                return int(f.cget("size"))
-            except Exception:
-                return 16
-        if isinstance(f, str):
-            for p in f.split():
-                if p.isdigit():
-                    return int(p)
-        return 16
-
     def _apply_emoji_images(self, widget):
-        """递归把含 emoji 的 Label/Button/Notebook/Tab/Treeview表头/LabelFrame 转为彩色图片。"""
-        try:
-            for child in widget.winfo_children():
-                self._apply_emoji_images(child)
-        except Exception:
-            pass
-        try:
-            cls = widget.winfo_class()
-        except Exception:
-            return
-        try:
-            if cls in ("Label", "TLabel", "Button", "TButton"):
-                txt = widget.cget("text")
-                if txt:
-                    emo, rest = self._split_leading_emoji(txt)
-                    if emo:
-                        img = self._emoji_image(emo, self._label_font_size(widget))
-                        if img is not None:
-                            widget.configure(image=img, compound=tk.LEFT, text=rest)
-                            widget.image = img
-            elif cls in ("Notebook", "TNotebook"):
-                for i in range(widget.index("end")):
-                    tabid = widget.tabs()[i]
-                    txt = widget.tab(tabid, "text")
-                    emo, rest = self._split_leading_emoji(txt)
-                    if emo:
-                        img = self._emoji_image(emo, 15)
-                        if img is not None:
-                            widget.tab(tabid, text=rest, image=img, compound=tk.LEFT)
-            elif cls in ("Treeview", "TTreeview"):
-                for col in widget["columns"]:
-                    htxt = widget.heading(col, "text")
-                    base = htxt if htxt else col
-                    emo, rest = self._split_leading_emoji(base)
-                    if emo:
-                        img = self._emoji_image(emo, 14)
-                        if img is not None:
-                            widget.heading(col, text=rest, image=img)
-            elif cls in ("LabelFrame", "TLabelFrame"):
-                txt = widget.cget("text")
-                if txt:
-                    emo, rest = self._split_leading_emoji(txt)
-                    if emo and ImageTk is not None:
-                        img = self._emoji_image(emo, self._label_font_size(widget) or 12)
-                        if img is not None:
-                            try:
-                                lbl = ttk.Label(widget, image=img, text=rest, compound=tk.LEFT)
-                                lbl.image = img
-                                widget.configure(labelwidget=lbl, text="")
-                            except Exception:
-                                widget.configure(text=rest if rest else "")
-        except Exception:
-            pass
+        """彩色 emoji 图片化管线已于 V1.8.9 移除（韦老板确认灰版观感更稳重），
+        保留为空 no-op 以维持既有调用点兼容。"""
+        pass
 
     def _set_emoji_text(self, widget, msg):
-        """动态更新含 emoji 的文本（保持彩色图片）。"""
-        emo, rest = self._split_leading_emoji(msg)
-        if emo and ImageTk is not None:
-            img = self._emoji_image(emo, self._label_font_size(widget))
-            if img is not None:
-                widget.configure(image=img, compound=tk.LEFT, text=rest)
-                widget.image = img
-                return
+        """动态更新文本（灰版：纯文本，emoji 由 Tk 原生渲染）。"""
         try:
-            widget.configure(image="", compound=tk.NONE, text=msg)
-        except Exception:
             widget.configure(text=msg)
+        except Exception:
+            pass
 
     def set_status(self, msg):
-        """状态栏：左侧彩色图标 + 右侧文本。"""
-        emo, rest = self._split_leading_emoji(msg)
-        if emo and ImageTk is not None:
-            img = self._emoji_image(emo, 14)
-            if img is not None:
-                self.status_icon.configure(image=img)
-                self.status_icon.image = img
-                self.status_text.configure(text=rest)
-                return
-        self.status_icon.configure(image="")
-        self.status_text.configure(text=msg)
+        """状态栏：左侧图标占位 + 右侧文本（灰版纯文本）。"""
+        try:
+            self.status_icon.configure(image="")
+            self.status_text.configure(text=msg)
+        except Exception:
+            pass
 
     def check_achievements(self, task):
         """Check and unlock achievements based on task completion."""
@@ -1071,9 +846,6 @@ class TodoApp:
         particles = []
         num_particles = 40
         
-        import math
-        import random
-        
         for i in range(num_particles):
             # Random angle and speed
             angle = (2 * math.pi * i) / num_particles + random.uniform(-0.3, 0.3)
@@ -1123,8 +895,6 @@ class TodoApp:
     
     def _animate_fireworks(self, canvas, particles, text_id, step):
         """Animate fireworks particles."""
-        import math
-        
         if step >= 50:  # Animation ends after 50 frames (~1.5 seconds)
             canvas.destroy()
             return
@@ -1204,7 +974,6 @@ class TodoApp:
                 self.exp_rank_label.config(text=f"{wisdom_title} | Lv.{weekly_level}")
             if hasattr(self, 'exp_daily_label'):
                 # 显示本周剩余天数
-                from datetime import date, timedelta
                 today = date.today()
                 monday = today - timedelta(days=today.weekday())
                 days_passed = (today - monday).days + 1
@@ -1420,10 +1189,7 @@ class TodoApp:
         
         # Calendar tab
         
-        # ── 底部状态栏（彩色 emoji 图片化：图标 + 文本）──
-        self._emoji_cache = {}
-        self._emoji_fonts = {}
-        self._emoji_font_path = self._find_emoji_font()
+        # ── 底部状态栏（灰版：图标占位 + 文本）──
         self.status_frame = tk.Frame(self.root, bg=THEME['colors']['status_bar'])
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_icon = tk.Label(self.status_frame, bg=THEME['colors']['status_bar'])
@@ -2188,6 +1954,35 @@ class TodoApp:
             print(error_detail)
             messagebox.showerror("🎯 领取新冒险出错", f"错误详情:\n{str(e)}")
     
+    def _complete_task_by_id(self, task_id):
+        """标记指定任务为完成：移动数据 + 更新游戏数据 + 播放动画。
+        供工具栏「标记通关」与表格复选框点击共用，消除重复逻辑。"""
+        task = None
+        for i, t in enumerate(self.data["tasks"]):
+            if t["id"] == task_id:
+                task = t
+                t["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.data["completed"].append(t)
+                self.data["tasks"].pop(i)
+                break
+        if not task:
+            return False
+
+        # Update game data
+        self.game_data["stats"]["total_completed"] += 1
+        priority = task.get("priority", "")
+        amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
+        task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
+        self.add_wisdom(amount)
+        self.check_achievements(task)
+        self.save_game_data()
+        self.update_game_display()
+
+        # 动画（与完成语义绑定，统一在此播放）
+        self.show_wisdom_animation(amount)
+        self.show_fireworks_animation()
+        return True
+
     def complete_task(self):
         """Mark a task as completed"""
         try:
@@ -2197,40 +1992,10 @@ class TodoApp:
                 return
             
             task_id = int(selection[0])
-            task = None
-            
-            for i, t in enumerate(self.data["tasks"]):
-                if t["id"] == task_id:
-                    task = t
-                    t["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.data["completed"].append(t)
-                    self.data["tasks"].pop(i)
-                    break
-            
-            self.save_data()
-            self.refresh_display()
-            
-            # Update game data
-            if task:
-                self.game_data["stats"]["total_completed"] += 1
-                
-                # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
-                priority = task.get("priority", "")
-                amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
-                task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
-                self.add_wisdom(amount)
-                
-                self.check_achievements(task)
-                self.save_game_data()
-                self.update_game_display()
-            
-            # Show wisdom animation
-            self.show_wisdom_animation(amount)
-            
-            # Show fireworks animation
-            self.show_fireworks_animation()
-            
-            self.set_status("🏁 冒险已通关！")
+            if self._complete_task_by_id(task_id):
+                self.save_data()
+                self.refresh_display()
+                self.set_status("🏁 冒险已通关！")
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -2269,46 +2034,10 @@ class TodoApp:
                 else:
                     # Main task - mark as complete
                     task_id = int(item)
-                    
-                    # Get task object before removing
-                    task = None
-                    for t in self.data["tasks"]:
-                        if t["id"] == task_id:
-                            task = t
-                            break
-                    
-                    # Mark task as complete (same logic as complete_task)
-                    for i, t in enumerate(self.data["tasks"]):
-                        if t["id"] == task_id:
-                            t["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            self.data["completed"].append(t)
-                            self.data["tasks"].pop(i)
-                            break
-                    
-                    self.save_data()
-                    self.refresh_display()
-                    
-                    # Update game data
-                    if task:
-                        self.game_data["stats"]["total_completed"] += 1
-                        
-                        # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
-                        priority = task.get("priority", "")
-                        amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
-                        task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
-                        self.add_wisdom(amount)
-                        
-                        self.check_achievements(task)
-                        self.save_game_data()
-                        self.update_game_display()
-                    
-                    # Show wisdom animation
-                    self.show_wisdom_animation(amount)
-                    
-                    # Show fireworks animation
-                    self.show_fireworks_animation()
-                    
-                    self.set_status("🏁 冒险已通关！")
+                    if self._complete_task_by_id(task_id):
+                        self.save_data()
+                        self.refresh_display()
+                        self.set_status("🏁 冒险已通关！")
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -2770,14 +2499,6 @@ class TodoApp:
         except Exception as e:
             messagebox.showerror("刷新失败", f"重新加载数据失败:\n{str(e)}")
     
-    def focus_task_entry(self):
-        """Focus on task entry widget for quick task addition."""
-        try:
-            self.task_entry.focus_set()
-            self.set_status(self.T['status_enter_desc'])
-        except Exception as e:
-            print(f"Error focusing task entry: {e}")
-    
     def show_add_subtask_dialog(self, task):
         """Show dialog to add a new subtask directly."""
         # Create dialog
@@ -3160,51 +2881,6 @@ class TodoApp:
                   cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT)
         self._apply_emoji_images(dialog)
     
-    def auto_resize_columns(self, tree):
-        """Auto-resize columns based on content and header text."""
-        try:
-            # Get font metrics - use the font defined in Style
-            style = ttk.Style()
-            font_name = style.lookup("Treeview", "font")
-            if font_name:
-                font = tkFont.Font(font=font_name)
-            else:
-                font = tkFont.Font(family="Microsoft YaHei", size=12)
-            
-            for col in tree['columns']:
-                # Skip checkbox column and "🗺️冒险类型" column - use fixed width
-                if col == '☑️':
-                    tree.column(col, width=40)
-                    continue
-                if col == self.T['col_type']:
-                    tree.column(col, width=135)
-                    continue
-                
-                # Calculate max width from content
-                max_width = 0
-                
-                # Check header text width
-                header_text = tree.heading(col, 'text')
-                header_width = font.measure(header_text) + 20  # Add padding
-                max_width = max(max_width, header_width)
-                
-                # Check each row's content width
-                for item in tree.get_children():
-                    cell_value = str(tree.item(item, 'values')[tree['columns'].index(col)])
-                    cell_width = font.measure(cell_value) + 20  # Add padding
-                    max_width = max(max_width, cell_width)
-                
-                # Set minimum and maximum width limits
-                min_width = 50
-                max_allowed_width = 500 if col == self.T['col_desc'] or 'description' in col.lower() else 300
-                
-                final_width = max(min_width, min(max_width, max_allowed_width))
-                
-                # Apply width to column
-                tree.column(col, width=final_width)
-        except Exception as e:
-            print(f"Warning: Could not auto-resize columns: {e}")
-    
     def refresh_display(self):
         """Refresh the display"""
         self.refresh_pending()
@@ -3334,9 +3010,6 @@ class TodoApp:
         self.pending_tree.tag_configure('subtask', background='#F5F5F5')  # Light gray for subtasks
         self.pending_tree.tag_configure('subtask_done', background='#E8E8E8', foreground='gray')  # Darker gray for completed subtasks
         
-        # Auto-resize columns based on content
-        self.auto_resize_columns(self.pending_tree)
-    
     def refresh_completed(self):
         """Refresh completed tasks display"""
         self.completed_tree.delete(*self.completed_tree.get_children())
@@ -3444,9 +3117,6 @@ class TodoApp:
                 # 超过1天:浅灰色
                 self.completed_tree.item(item, tags=('completed_old',))
         
-        # Auto-resize columns based on content
-        self.auto_resize_columns(self.completed_tree)
-    
     # ──────────────────────────────────────────────
     #  STATISTICS — Table-based, week-aware
     # ──────────────────────────────────────────────
