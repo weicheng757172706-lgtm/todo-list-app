@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.6"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.5 新增应用图标(深蓝圆盾+金剑)；本版 V1.8.6 更换应用图标主题为「清单打勾」(深蓝圆盾+金色清单卡✓)；列布局方案B/窗口还原锁回900x650等保留
+VERSION = "V1.8.7"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.6 更换图标主题「清单打勾」；V1.8.7 将界面文案+成长级别主题化（清单套映射为「工作任务管理器」文案与青铜/白银/铂金/钻石/大师/王者六级，双剑套保持原冒险文案）；列布局/窗口还原锁回900x650等保留
 
 import json
 import os
@@ -88,6 +88,70 @@ DEFAULT_THEME = {
         "dark_bg": "#2B2B2B",
         "dark_fg": "#9B59B6",
     },
+    # ── 界面文案（多套主题差异化核心；emoji 随文字一起主题化）──
+    # 默认=冒险双剑文案。清单打勾等套在 theme.json 的 text 段覆盖即可。
+    "text": {
+        # 列名（含 emoji；同时作为 Treeview 列 key 与显示一体）
+        "col_id": "编号",
+        "col_id_emoji": "🔢 编号",
+        "col_desc": "📝 冒险描述",
+        "col_type": "🗺️ 冒险类型",
+        "col_priority": "⚡ 紧急等级",
+        "col_owner": "⚔️ 冒险者",
+        "col_tag": "🏷️ 标签",
+        "col_progress": "📊 进度",
+        "col_receive": "⏰ 领取时间",
+        "col_complete_time": "🏁 通关时间",
+        "col_duration": "⏱️ 冒险时长",
+        # 顶部 tab
+        "tab_pending": "🚀 进行中的冒险",
+        "tab_completed": "🏁 已通关的冒险",
+        "tab_stats": "📊 冒险战绩",
+        # 工具栏按钮
+        "btn_mark": "🎯 标记通关",
+        "btn_abandon": "🗑 放弃冒险",
+        "btn_edit": "✏ 编辑冒险",
+        "btn_refresh": "🔄 刷新冒险",
+        "btn_clear": "🗑 清空冒险",
+        "btn_export": "📤 导出战绩",
+        # 表单标签
+        "lbl_desc_add": "🎯 冒险描述:",
+        "lbl_desc_edit": "📝 冒险描述:",
+        "lbl_type": "🗺️ 冒险类型:",
+        "lbl_priority": "⚡ 紧急等级:",
+        "lbl_owner": "⚔️ 冒险者:",
+        # 统计区
+        "stat_priority": "⚡ 按紧急等级",
+        "stat_category": "🗺️ 按冒险类型",
+        "stat_ongoing": "🚀 进行中",
+        "stat_done": "🏁 已通关",
+        "stat_total": "📊 合计",
+        # 排序下拉
+        "sort_default": "默认顺序",
+        "sort_priority": "按紧急程度",
+        "sort_created": "按创建时间",
+        "sort_desc": "按任务描述",
+        "sort_completed": "按通关时间",
+        # 导出
+        "export_title": "📤 导出战绩",
+        "export_sheet": "🏁 已通关冒险",
+        "export_file_week": "{week} 已通关冒险列表.xlsx",
+        "export_file_iso": "{year}年第{week}周 已通关冒险列表.xlsx",
+        # 状态栏 / 校验 / 弹窗
+        "status_enter_desc": "🎯 请输入冒险描述...",
+        "warn_enter_desc": "🎯 请输入冒险描述！",
+        "valid_owner": "冒险者名称不能超过100个字符！",
+        "edit_dlg_title": "✏️ 编辑冒险 #",
+    },
+    # ── 成长级别（Lv + 称号 + 经验阈值；阈值同原冒险体系，称号可按套覆盖）──
+    "levels": [
+        {"name": "菜鸟路人", "min": 0, "max": 60},
+        {"name": "见习旅者", "min": 61, "max": 200},
+        {"name": "荒野智者", "min": 201, "max": 300},
+        {"name": "探险泰斗", "min": 301, "max": 400},
+        {"name": "传奇冒险家", "min": 401, "max": 500},
+        {"name": "至尊冒险王", "min": 501, "max": 999999},
+    ],
 }
 
 
@@ -198,7 +262,7 @@ class TodoApp:
         
         # Check length
         if len(person) > 100:
-            return False, "冒险者名称不能超过100个字符！"
+            return False, self.T['valid_owner']
         
         return True, ""
     
@@ -261,6 +325,9 @@ class TodoApp:
     
     def __init__(self, root):
         self.root = root
+        # 主题化文案 / 等级（多套主题：双剑用默认冒险文案，清单套覆盖）
+        self.T = THEME['text']
+        self.LEVELS = THEME['levels']
         self.root.title(f"{THEME['title']} {VERSION}")
         # ── 主窗口尺寸：首开与「从最大化还原」共用唯一基准（V1.6.18）──
         self.window_home = "900x650"  # 首开小窗口尺寸；从最大化还原须锁回此尺寸
@@ -324,7 +391,7 @@ class TodoApp:
         self.timer_display_var = tk.StringVar(value="⏰ 25:00")
         
         # Sorting criteria
-        self.sort_criteria = tk.StringVar(value="默认顺序")
+        self.sort_criteria = tk.StringVar(value=self.T['sort_default'])
         
         # Search query
         self.search_query = tk.StringVar()
@@ -562,48 +629,25 @@ class TodoApp:
     
     @staticmethod
     def get_wisdom_title(level):
-        """Calculate wisdom title based on LEVEL (V1.6.0：每周智慧系统)."""
-        if level == 1:
-            return "菜鸟路人"
-        elif level == 2:
-            return "见习旅者"
-        elif level == 3:
-            return "荒野智者"
-        elif level == 4:
-            return "探险泰斗"
-        elif level == 5:
-            return "传奇冒险家"
-        else:  # level >= 6
-            return "至尊冒险王"
-    
+        """Calculate wisdom title based on LEVEL (主题化：读 THEME['levels'])."""
+        levels = THEME['levels']
+        idx = max(1, min(int(level), len(levels))) - 1
+        return levels[idx]['name']
+
     @staticmethod
     def get_wisdom_for_level(level):
-        """Return wisdom needed for each level (V1.6.0)."""
-        wisdom_thresholds = {
-            1: (0, 60),      # LV1: 0~60
-            2: (61, 200),    # LV2: 61~200
-            3: (201, 300),   # LV3: 201~300
-            4: (301, 400),   # LV4: 301~400
-            5: (401, 500),   # LV5: 401~500
-            6: (501, 999999) # LV6: 501~♾️
-        }
-        return wisdom_thresholds.get(level, (0, 999999))
-    
+        """Return wisdom needed for each level (主题化：读 THEME['levels'])."""
+        levels = THEME['levels']
+        idx = max(1, min(int(level), len(levels))) - 1
+        return (levels[idx]['min'], levels[idx]['max'])
+
     @staticmethod
     def get_level_from_wisdom(wisdom):
-        """Calculate level from wisdom points (V1.6.0)."""
-        if wisdom <= 60:
-            return 1
-        elif wisdom <= 200:
-            return 2
-        elif wisdom <= 300:
-            return 3
-        elif wisdom <= 400:
-            return 4
-        elif wisdom <= 500:
-            return 5
-        else:
-            return 6
+        """Calculate level from wisdom points (主题化：读 THEME['levels'])."""
+        for i, lv in enumerate(THEME['levels'], 1):
+            if lv['min'] <= wisdom <= lv['max']:
+                return i
+        return len(THEME['levels'])
     
     def _check_wisdom_level_up(self):
         """Check and process level up (V1.6.0)."""
@@ -1271,7 +1315,7 @@ class TodoApp:
         row0 = tk.Frame(input_frame)
         row0.pack(fill=tk.X, pady=(0, 8))
 
-        tk.Label(row0, text="🎯 冒险描述:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(row0, text=self.T['lbl_desc_add'], font=self.font_label).pack(side=tk.LEFT, padx=(0, 8))
 
         self.task_entry = tk.Entry(row0, font=self.font_entry)
         self.task_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12))
@@ -1289,7 +1333,7 @@ class TodoApp:
         # -- Priority group --
         g1 = tk.Frame(row1)
         g1.pack(side=tk.LEFT, padx=(0, 18))
-        tk.Label(g1, text="⚡ 紧急等级:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g1, text=self.T['lbl_priority'], font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.priority_var = tk.StringVar(value=self.priority_options[0])
         self.priority_combo = ttk.Combobox(g1, textvariable=self.priority_var,
                                            values=self.priority_options,
@@ -1299,7 +1343,7 @@ class TodoApp:
         # -- Category group --
         g2 = tk.Frame(row1)
         g2.pack(side=tk.LEFT, padx=(0, 18))
-        tk.Label(g2, text="🗺️ 冒险类型:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g2, text=self.T['lbl_type'], font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.category_var = tk.StringVar(value=self.category_options[0])
         self.category_combo = ttk.Combobox(g2, textvariable=self.category_var,
                                            values=self.category_options,
@@ -1309,7 +1353,7 @@ class TodoApp:
         # -- Person group --
         g3 = tk.Frame(row1)
         g3.pack(side=tk.LEFT, padx=(0, 18))
-        tk.Label(g3, text="⚔️ 冒险者:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g3, text=self.T['lbl_owner'], font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.person_entry = tk.Entry(g3, width=10, font=self.font_entry)
         self.person_entry.pack(side=tk.LEFT)
         
@@ -1362,15 +1406,15 @@ class TodoApp:
         notebook.pack(fill=tk.BOTH, expand=True, padx=15, pady=(5, 10))
 
         pending_frame = tk.Frame(notebook)
-        notebook.add(pending_frame, text="🚀 进行中的冒险")
+        notebook.add(pending_frame, text=self.T['tab_pending'])
         self.setup_pending_tab(pending_frame)
 
         completed_frame = tk.Frame(notebook)
-        notebook.add(completed_frame, text="🏁 已通关的冒险")
+        notebook.add(completed_frame, text=self.T['tab_completed'])
         self.setup_completed_tab(completed_frame)
 
         stats_frame = tk.Frame(notebook)
-        notebook.add(stats_frame, text="📊 冒险战绩")
+        notebook.add(stats_frame, text=self.T['tab_stats'])
         self.setup_stats_tab(stats_frame)
         
         # Calendar tab
@@ -1400,19 +1444,19 @@ class TodoApp:
         toolbar = tk.Frame(parent)
         toolbar.pack(fill=tk.X, pady=(10, 10))
         
-        tk.Button(toolbar, text="🎯 标记通关", command=self.complete_task,
+        tk.Button(toolbar, text=self.T['btn_mark'], command=self.complete_task,
                   bg="#5CB85C", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
         
-        tk.Button(toolbar, text="🗑 放弃冒险", command=self.delete_task,
+        tk.Button(toolbar, text=self.T['btn_abandon'], command=self.delete_task,
                   bg="#D9534F", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(toolbar, text="✏ 编辑冒险", command=self.edit_task,
+        tk.Button(toolbar, text=self.T['btn_edit'], command=self.edit_task,
                   bg="#F0AD4E", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(toolbar, text="🔄 刷新冒险", command=self.reload_data,
+        tk.Button(toolbar, text=self.T['btn_refresh'], command=self.reload_data,
                   bg="#6C757D", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
         
@@ -1422,7 +1466,7 @@ class TodoApp:
         
         tk.Label(sort_frame, text="排序：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
         self.sort_combobox = ttk.Combobox(sort_frame, textvariable=self.sort_criteria,
-                                             values=["默认顺序", "按紧急程度", "按创建时间", "按任务描述"],
+                                             values=[self.T['sort_default'], self.T['sort_priority'], self.T['sort_created'], self.T['sort_desc']],
                                              state="readonly", width=12, font=self.font_label)
         self.sort_combobox.pack(side=tk.LEFT)
         self.sort_combobox.bind('<<ComboboxSelected>>', lambda e: self.refresh_display())
@@ -1466,7 +1510,7 @@ class TodoApp:
         table_frame = tk.Frame(parent)
         table_frame.pack(fill=tk.BOTH, expand=True)
         
-        columns = ('☑️', '编号', '📝 冒险描述', '🗺️ 冒险类型', '⚡ 紧急等级', '⚔️ 冒险者', '🏷️ 标签', '📊 进度', '⏰ 领取时间')
+        columns = ('☑️', '编号', self.T['col_desc'], self.T['col_type'], self.T['col_priority'], self.T['col_owner'], self.T['col_tag'], self.T['col_progress'], self.T['col_receive'])
         self.pending_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=20)
         
         style = ttk.Style()
@@ -1486,39 +1530,39 @@ class TodoApp:
         col_widths = {
             '☑️': 35,
             '编号': 40,
-            '📝 冒险描述': 300,
-            '🗺️ 冒险类型': 100,
-            '⚡ 紧急等级': 100,
-            '⚔️ 冒险者': 100,
-            '🏷️ 标签': 90,
-            '📊 进度': 70,
-            '⏰ 领取时间': 140
+            self.T['col_desc']: 300,
+            self.T['col_type']: 100,
+            self.T['col_priority']: 100,
+            self.T['col_owner']: 100,
+            self.T['col_tag']: 90,
+            self.T['col_progress']: 70,
+            self.T['col_receive']: 140
         }
         # 各列最小宽度保底：窗口缩小时列名不再被截断（方案A，V1.6.20）
         col_minwidths = {
             '☑️': 30,
             '编号': 50,
-            '📝 冒险描述': 150,
-            '🗺️ 冒险类型': 95,
-            '⚡ 紧急等级': 95,
-            '⚔️ 冒险者': 85,
-            '🏷️ 标签': 75,
-            '📊 进度': 75,
-            '⏰ 领取时间': 150
+            self.T['col_desc']: 150,
+            self.T['col_type']: 95,
+            self.T['col_priority']: 95,
+            self.T['col_owner']: 85,
+            self.T['col_tag']: 75,
+            self.T['col_progress']: 75,
+            self.T['col_receive']: 150
         }
         for col in columns:
             self.pending_tree.heading(col, text=col, anchor=tk.CENTER)
             # 方案B（V1.6.20修正）：仅「冒险描述」stretch=True 吸收伸缩，其余列全部钉死
             # → 全屏后缩小 = 首开小窗口效果（核心列宽度不变）
-            anchor = tk.W if col in ['⚔️ 冒险者', '🏷️ 标签'] else tk.CENTER
+            anchor = tk.W if col in [self.T['col_owner'], self.T['col_tag']] else tk.CENTER
             w = col_widths.get(col, 100)
             mw = col_minwidths.get(col, 40)
-            if col == '📝 冒险描述':
+            if col == self.T['col_desc']:
                 self.pending_tree.column(col, width=w, minwidth=mw, stretch=True, anchor=anchor)
-            elif col != '⏰ 领取时间':  # 领取时间单独在循环外处理
+            elif col != self.T['col_receive']:  # 领取时间单独在循环外处理
                 self.pending_tree.column(col, stretch=False, width=w, minwidth=mw, anchor=anchor)
         # 时间列不参与拉伸压缩，窗口缩小时始终完整显示时间戳（V1.6.19）
-        self.pending_tree.column('⏰ 领取时间', stretch=False, width=150, minwidth=150)
+        self.pending_tree.column(self.T['col_receive'], stretch=False, width=150, minwidth=150)
         
         vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.pending_tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.pending_tree.xview)
@@ -1557,20 +1601,20 @@ class TodoApp:
                     context_menu.add_command(label="✏️ 修改任务描述", command=self.edit_subtask_from_menu)
                     context_menu.add_command(label="🗑 放弃支线任务", command=self.delete_subtask_from_menu)
                     context_menu.add_separator()
-                    context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+                    context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
                 else:
                     # Selected a main task - show menu with delete/edit/add subtask
                     self.pending_tree.selection_set(item)
-                    context_menu.add_command(label="🗑 放弃冒险", command=self.delete_task)
-                    context_menu.add_command(label="✏ 编辑冒险", command=self.edit_task)
+                    context_menu.add_command(label=self.T['btn_abandon'], command=self.delete_task)
+                    context_menu.add_command(label=self.T['btn_edit'], command=self.edit_task)
                     context_menu.add_command(label="🎯 接取支线任务", command=self.context_add_subtask)
                     context_menu.add_separator()
-                    context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+                    context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
             else:
                 # No task selected - show menu with add/refresh
                 context_menu.add_command(label="🎯 领取新冒险", command=self.show_add_task_dialog)
                 context_menu.add_separator()
-                context_menu.add_command(label="🔄 刷新冒险", command=self.reload_data)
+                context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
             
             context_menu.post(event.x_root, event.y_root)
         except Exception as e:
@@ -1803,11 +1847,11 @@ class TodoApp:
                   bg="#E67E22", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(toolbar, text="🗑 清空冒险", command=self.delete_all_completed,
+        tk.Button(toolbar, text=self.T['btn_clear'], command=self.delete_all_completed,
                   bg="#C0392B", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 16))
 
-        tk.Button(toolbar, text="📤 导出战绩", command=self.export_completed,
+        tk.Button(toolbar, text=self.T['btn_export'], command=self.export_completed,
                   bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
@@ -1818,7 +1862,7 @@ class TodoApp:
         
         tk.Label(sort_frame, text="排序：", font=self.font_label).pack(side=tk.LEFT, padx=(0, 5))
         self.sort_combobox_completed = ttk.Combobox(sort_frame, textvariable=self.sort_criteria, 
-                                                   values=["默认顺序", "按紧急程度", "按创建时间", "按任务描述", "按通关时间"],
+                                                   values=[self.T['sort_default'], self.T['sort_priority'], self.T['sort_created'], self.T['sort_desc'], self.T['sort_completed']],
                                                    state="readonly", width=12, font=self.font_label)
         self.sort_combobox_completed.pack(side=tk.LEFT)
         self.sort_combobox_completed.bind('<<ComboboxSelected>>', lambda e: self.refresh_completed())
@@ -1835,7 +1879,7 @@ class TodoApp:
         table_frame = tk.Frame(parent)
         table_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ('☑️', '编号', '📝 冒险描述', '🗺️冒险类型', '⚡ 紧急等级', '⚔️ 冒险者', '🏷️ 标签', '📊 进度', '🏁 通关时间', '⏱️ 冒险时长')
+        columns = ('☑️', '编号', self.T['col_desc'], self.T['col_type'], self.T['col_priority'], self.T['col_owner'], self.T['col_tag'], self.T['col_progress'], self.T['col_complete_time'], self.T['col_duration'])
         self.completed_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
         
         # 已完成任务背景色配置
@@ -1844,25 +1888,25 @@ class TodoApp:
         self.completed_tree.tag_configure('completed_old', background='#D3D3D3', foreground='#666666')
         
         col_widths = {
-            '☑️': 35, '编号': 40, '📝 冒险描述': 260,
-            '🗺️冒险类型': 100, '⚡ 紧急等级': 100, '⚔️ 冒险者': 100,
-            '🏷️ 标签': 90, '📊 进度': 70,
-            '🏁 通关时间': 130, '⏱️ 冒险时长': 100
+            '☑️': 35, '编号': 40, self.T['col_desc']: 260,
+            self.T['col_type']: 100, self.T['col_priority']: 100, self.T['col_owner']: 100,
+            self.T['col_tag']: 90, self.T['col_progress']: 70,
+            self.T['col_complete_time']: 130, self.T['col_duration']: 100
         }
         col_minwidths = {
-            '☑️': 30, '编号': 35, '📝 冒险描述': 260,
-            '🗺️冒险类型': 80, '⚡ 紧急等级': 80, '⚔️ 冒险者': 80,
-            '🏷️ 标签': 70, '📊 进度': 60,
-            '🏁 通关时间': 110, '⏱️ 冒险时长': 90
+            '☑️': 30, '编号': 35, self.T['col_desc']: 260,
+            self.T['col_type']: 80, self.T['col_priority']: 80, self.T['col_owner']: 80,
+            self.T['col_tag']: 70, self.T['col_progress']: 60,
+            self.T['col_complete_time']: 110, self.T['col_duration']: 90
         }
         for col in columns:
             self.completed_tree.heading(col, text=col, anchor=tk.CENTER)
             # 方案B（V1.6.21 同步）：仅「冒险描述」stretch=True 吸收伸缩，其余列全部钉死
             # → 全屏后缩小 = 首开小窗口效果
-            anchor = tk.W if col in ['⚔️ 冒险者', '🏷️ 标签'] else tk.CENTER
+            anchor = tk.W if col in [self.T['col_owner'], self.T['col_tag']] else tk.CENTER
             w = col_widths.get(col, 100)
             mw = col_minwidths.get(col, 40)
-            if col == '📝 冒险描述':
+            if col == self.T['col_desc']:
                 self.completed_tree.column(col, width=w, minwidth=mw, stretch=True, anchor=anchor)
             else:
                 self.completed_tree.column(col, stretch=False, width=w, minwidth=mw, anchor=anchor)
@@ -1883,8 +1927,8 @@ class TodoApp:
         self.completed_context_menu = tk.Menu(self.root, tearoff=0, font=self.font_label)
         self.completed_context_menu.add_command(label="🔄 恢复冒险", command=self.restore_task)
         self.completed_context_menu.add_command(label="🗑 删除冒险", command=self.delete_completed)
-        self.completed_context_menu.add_command(label="📤 导出战绩", command=self.export_completed)
-        self.completed_context_menu.add_command(label="🗑 清空冒险", command=self.delete_all_completed)
+        self.completed_context_menu.add_command(label=self.T['btn_export'], command=self.export_completed)
+        self.completed_context_menu.add_command(label=self.T['btn_clear'], command=self.delete_all_completed)
     
     def show_completed_context_menu(self, event):
         """Show right-click context menu for completed tasks"""
@@ -1942,7 +1986,7 @@ class TodoApp:
                  bg=THEME['colors']['title_bar'], fg=THEME['colors']['status_bar']).pack(anchor=tk.W)
         
         self.exp_rank_label = tk.Label(
-            exp_card, text="菜鸟路人 | Lv.1", font=("Microsoft YaHei", 22, "bold"),
+            exp_card, text=f"{self.get_wisdom_title(1)} | Lv.1", font=("Microsoft YaHei", 22, "bold"),
             bg=THEME['colors']['title_bar'], fg=THEME['colors']['accent']
         )
         self.exp_rank_label.pack(pady=(6, 2))
@@ -1960,7 +2004,7 @@ class TodoApp:
         self.exp_progress_canvas.pack(pady=(4, 2))
         
         self.exp_detail_label = tk.Label(
-            exp_card, text="0/60 智慧 → 见习旅者 (Lv.2)", font=("Microsoft YaHei", 10),
+            exp_card, text=f"0/{self.get_wisdom_for_level(2)[1]} 智慧 → {self.get_wisdom_title(2)} (Lv.2)", font=("Microsoft YaHei", 10),
             bg=THEME['colors']['title_bar'], fg="#BDC3C7"
         )
         self.exp_detail_label.pack(anchor=tk.W, pady=(2, 0))
@@ -2025,11 +2069,11 @@ class TodoApp:
         mid_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
         # -- Priority table --
-        pri_frame = tk.LabelFrame(mid_frame, text="⚡ 按紧急等级",
+        pri_frame = tk.LabelFrame(mid_frame, text=self.T['stat_priority'],
                                   font=self.font_label, padx=8, pady=8)
         pri_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
-        p_cols = ('⚡ 紧急等级', '🚀 进行中', '🏁 已通关', '📊 合计')
+        p_cols = (self.T['col_priority'], self.T['stat_ongoing'], self.T['stat_done'], self.T['stat_total'])
         self.stat_priority_tree = ttk.Treeview(pri_frame, columns=p_cols,
                                                show='headings', height=5)
         for c in p_cols:
@@ -2038,14 +2082,14 @@ class TodoApp:
         self.stat_priority_tree.pack(fill=tk.BOTH, expand=True)
         
         # -- Category table --
-        cat_frame = tk.LabelFrame(mid_frame, text="🗺️ 按冒险类型",
+        cat_frame = tk.LabelFrame(mid_frame, text=self.T['stat_category'],
                                   font=self.font_label, padx=8, pady=8)
         cat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        c_cols = ('🗺️ 冒险类型', '🚀 进行中', '🏁 已通关', '📊 合计')
+        c_cols = (self.T['col_type'], self.T['stat_ongoing'], self.T['stat_done'], self.T['stat_total'])
         self.stat_category_tree = ttk.Treeview(cat_frame, columns=c_cols,
                                                show='headings', height=5)
-        col_widths = {'🗺️ 冒险类型': 135, '🚀 进行中': 95, '🏁 已通关': 95, '📊 合计': 95}
+        col_widths = {self.T['col_type']: 135, self.T['stat_ongoing']: 95, self.T['stat_done']: 95, self.T['stat_total']: 95}
         for c in c_cols:
             self.stat_category_tree.heading(c, text=c, anchor=tk.CENTER)
             self.stat_category_tree.column(c, width=col_widths.get(c, 95), minwidth=80, anchor=tk.CENTER)
@@ -2312,7 +2356,7 @@ class TodoApp:
         
         # ── Build edit dialog ──
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"✏️ 编辑冒险 #{task_id}")
+        dialog.title(f"{self.T['edit_dlg_title']}{task_id}")
         dialog.geometry("520x450")  # Increased height to show all fields
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -2330,7 +2374,7 @@ class TodoApp:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # --- 📝 冒险描述 ---
-        tk.Label(main_frame, text="📝 冒险描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['lbl_desc_edit'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         text_var = tk.StringVar(value=task.get("text", ""))
         text_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=text_var)
         text_entry.pack(fill=tk.X, pady=(0, 14))
@@ -2342,7 +2386,7 @@ class TodoApp:
         
         g1 = tk.Frame(row_frame)
         g1.pack(side=tk.LEFT, padx=(0, 20))
-        tk.Label(g1, text="🗺️ 冒险类型:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g1, text=self.T['lbl_type'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         category_var = tk.StringVar(value=task.get("category", self.category_options[0]))
         category_combo = ttk.Combobox(g1, textvariable=category_var,
                                       values=self.category_options,
@@ -2351,7 +2395,7 @@ class TodoApp:
         
         g2 = tk.Frame(row_frame)
         g2.pack(side=tk.LEFT)
-        tk.Label(g2, text="⚡ 紧急等级:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g2, text=self.T['lbl_priority'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         priority_var = tk.StringVar(value=task.get("priority", self.priority_options[0]))
         priority_combo = ttk.Combobox(g2, textvariable=priority_var,
                                       values=self.priority_options,
@@ -2359,7 +2403,7 @@ class TodoApp:
         priority_combo.pack()
         
         # --- ⚔️ 冒险者 ---
-        tk.Label(main_frame, text="⚔️ 冒险者:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['lbl_owner'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         person_var = tk.StringVar(value=task.get("person", ""))
         person_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=person_var)
         person_entry.pack(fill=tk.X, pady=(0, 14))
@@ -2545,14 +2589,14 @@ class TodoApp:
         # If week filter is active, include week info in filename
         selected_week = self.week_filter_var.get()
         if selected_week and selected_week != "全部":
-            default_filename = f"{selected_week} 已通关冒险列表.xlsx"
+            default_filename = self.T['export_file_week'].format(week=selected_week)
         else:
-            default_filename = f"{iso_year}年第{iso_week}周 已通关冒险列表.xlsx"
+            default_filename = self.T['export_file_iso'].format(year=iso_year, week=iso_week)
         
         file_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel 文件", "*.xlsx"), ("所有文件", "*.*")],
-            title="📤 导出战绩",
+            title=self.T['btn_export'],
             initialfile=default_filename
         )
         if not file_path:
@@ -2560,7 +2604,7 @@ class TodoApp:
         
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "🏁 已通关冒险"
+        ws.title = self.T['export_sheet']
         
         # ── Header style ──
         header_font = Font(name="Microsoft YaHei", bold=True, size=12, color="FFFFFF")
@@ -2572,7 +2616,7 @@ class TodoApp:
         )
         
         # ── Write headers ──
-        headers = ["🔢 编号", "📝 冒险描述", "🗺️ 冒险类型", "⚡ 紧急等级", "⚔️ 冒险者", "🏷️ 标签", "🏁 通关时间", "📅 领取时间", "⏱️ 冒险时长"]
+        headers = [self.T['col_id_emoji'], self.T['col_desc'], self.T['col_type'], self.T['col_priority'], self.T['col_owner'], self.T['col_tag'], self.T['col_complete_time'], self.T['col_receive'], self.T['col_duration']]
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_idx, value=header)
             cell.font = header_font
@@ -2603,7 +2647,7 @@ class TodoApp:
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
                 cell.font = data_font
                 cell.border = thin_border
-                if col_idx == 2:  # 📝 冒险描述 - left align
+                if col_idx == 2:  # 描述列左对齐
                     cell.alignment = content_align
                 else:
                     cell.alignment = data_align
@@ -2729,7 +2773,7 @@ class TodoApp:
         """Focus on task entry widget for quick task addition."""
         try:
             self.task_entry.focus_set()
-            self.set_status("🎯 请输入冒险描述...")
+            self.set_status(self.T['status_enter_desc'])
         except Exception as e:
             print(f"Error focusing task entry: {e}")
     
@@ -3024,7 +3068,7 @@ class TodoApp:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # --- 📝 冒险描述 ---
-        tk.Label(main_frame, text="📝 冒险描述:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['lbl_desc_edit'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         text_var = tk.StringVar()
         text_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=text_var)
         text_entry.pack(fill=tk.X, pady=(0, 14))
@@ -3036,7 +3080,7 @@ class TodoApp:
         
         g1 = tk.Frame(row_frame)
         g1.pack(side=tk.LEFT, padx=(0, 20))
-        tk.Label(g1, text="🗺️ 冒险类型:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g1, text=self.T['lbl_type'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         category_var = tk.StringVar(value=self.category_options[0])
         category_combo = ttk.Combobox(g1, textvariable=category_var,
                                       values=self.category_options,
@@ -3045,7 +3089,7 @@ class TodoApp:
         
         g2 = tk.Frame(row_frame)
         g2.pack(side=tk.LEFT)
-        tk.Label(g2, text="⚡ 紧急等级:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(g2, text=self.T['lbl_priority'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         priority_var = tk.StringVar(value=self.priority_options[0])
         priority_combo = ttk.Combobox(g2, textvariable=priority_var,
                                       values=self.priority_options,
@@ -3053,7 +3097,7 @@ class TodoApp:
         priority_combo.pack()
         
         # --- ⚔️ 冒险者 ---
-        tk.Label(main_frame, text="⚔️ 冒险者:", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['lbl_owner'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         person_var = tk.StringVar(value="韦程")
         person_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=person_var)
         person_entry.pack(fill=tk.X, pady=(0, 14))
@@ -3072,7 +3116,7 @@ class TodoApp:
             """Save the new task"""
             task_text = text_var.get().strip()
             if not task_text:
-                messagebox.showwarning("警告", "🎯 请输入冒险描述！")
+                messagebox.showwarning("警告", self.T['warn_enter_desc'])
                 return
             
             # Process tags
@@ -3131,7 +3175,7 @@ class TodoApp:
                 if col == '☑️':
                     tree.column(col, width=40)
                     continue
-                if '冒险类型' in col:
+                if col == self.T['col_type']:
                     tree.column(col, width=135)
                     continue
                 
@@ -3151,7 +3195,7 @@ class TodoApp:
                 
                 # Set minimum and maximum width limits
                 min_width = 50
-                max_allowed_width = 500 if '描述' in header_text or 'description' in col.lower() else 300
+                max_allowed_width = 500 if col == self.T['col_desc'] or 'description' in col.lower() else 300
                 
                 final_width = max(min_width, min(max_width, max_allowed_width))
                 
@@ -3176,7 +3220,7 @@ class TodoApp:
         criteria = self.sort_criteria.get()
         
         # Sort tasks based on criteria
-        if criteria == "默认顺序":
+        if criteria == self.T['sort_default']:
             # 优先级排序：红色警报 > 修炼升级 > 临时密令 > 佛系摸鱼
             priority_order = {
                 "红色警报": 1,
@@ -3186,7 +3230,7 @@ class TodoApp:
             }
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: priority_order.get(t.get("priority", ""), 999))
-        elif criteria == "按紧急程度":
+        elif criteria == self.T['sort_priority']:
             # 按紧急程度排序（同默认顺序）
             priority_order = {
                 "红色警报": 1,
@@ -3196,11 +3240,11 @@ class TodoApp:
             }
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: priority_order.get(t.get("priority", ""), 999))
-        elif criteria == "按创建时间":
+        elif criteria == self.T['sort_created']:
             # 按创建时间排序（新到旧）
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: t.get("created", ""), reverse=True)
-        elif criteria == "按任务描述":
+        elif criteria == self.T['sort_desc']:
             # 按任务描述排序（A-Z）
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: t.get("text", "").lower())
@@ -3351,10 +3395,10 @@ class TodoApp:
         
         # Sort based on criteria
         criteria = self.sort_criteria.get()
-        if criteria == "默认顺序" or criteria == "按通关时间":
+        if criteria == self.T['sort_default'] or criteria == self.T['sort_completed']:
             # 按完成时间倒序排列(最新的在前面)
             filtered_tasks.sort(key=lambda t: t.get("completed", ""), reverse=True)
-        elif criteria == "按紧急程度":
+        elif criteria == self.T['sort_priority']:
             # 按紧急程度排序
             priority_order = {
                 "红色警报": 1,
@@ -3363,10 +3407,10 @@ class TodoApp:
                 "佛系摸鱼": 4
             }
             filtered_tasks.sort(key=lambda t: priority_order.get(t.get("priority", ""), 999))
-        elif criteria == "按创建时间":
+        elif criteria == self.T['sort_created']:
             # 按创建时间排序（新到旧）
             filtered_tasks.sort(key=lambda t: t.get("created", ""), reverse=True)
-        elif criteria == "按任务描述":
+        elif criteria == self.T['sort_desc']:
             # 按任务描述排序（A-Z）
             filtered_tasks.sort(key=lambda t: t.get("text", "").lower())
         else:
