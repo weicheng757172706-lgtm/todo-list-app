@@ -926,11 +926,11 @@ class TodoApp:
         
         tk.Label(level_up_window, text="🎉", font=("Microsoft YaHei", 48)).pack(pady=15)
         tk.Label(level_up_window, text=f"等级提升！", font=("Microsoft YaHei", 16, "bold")).pack()
-        tk.Label(level_up_window, text=f"{title} | Lv.{level}", font=("Microsoft YaHei", 14, "bold"), fg="THEME['colors']['accent']").pack(pady=8)
+        tk.Label(level_up_window, text=f"{title} | Lv.{level}", font=("Microsoft YaHei", 14, "bold"), fg=THEME['colors']['accent']).pack(pady=8)
         tk.Label(level_up_window, text=f"本周智慧: {wisdom}", font=("Microsoft YaHei", 12)).pack()
         
         tk.Button(level_up_window, text="继续冒险！", command=level_up_window.destroy,
-                 font=("Microsoft YaHei", 12), bg="THEME['colors']['primary']", fg="white").pack(pady=15)
+                 font=("Microsoft YaHei", 12), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
         self._apply_emoji_images(level_up_window)
     
     def show_achievement_animation(self, title, description):
@@ -952,7 +952,7 @@ class TodoApp:
         tk.Label(achievement_window, text=description, font=("Microsoft YaHei", 10)).pack()
         
         tk.Button(achievement_window, text="太棒了！", command=achievement_window.destroy,
-                 font=("Microsoft YaHei", 10), bg="THEME['colors']['primary']", fg="white").pack(pady=15)
+                 font=("Microsoft YaHei", 10), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
         self._apply_emoji_images(achievement_window)
     
     def show_new_task_animation(self):
@@ -965,7 +965,7 @@ class TodoApp:
             text="🎯 新冒险已生成！",
             font=("Microsoft YaHei", 20, "bold"),
             fg="#00AA00",
-            bg="THEME['colors']['panel_bg']"
+            bg=THEME['colors']['panel_bg']
         )
         self.animation_label.place(relx=0.5, rely=0.4, anchor=tk.CENTER)
         self._apply_emoji_images(self.animation_label)
@@ -1171,7 +1171,7 @@ class TodoApp:
                 else:
                     self.exp_detail_label.config(text=f"{weekly_wisdom}/{max_wisdom} 智慧 → {next_title} (Lv.{next_level})")
             if hasattr(self, 'exp_progress_canvas'):
-                self._draw_progress_bar(self.exp_progress_canvas, wisdom_progress, "THEME['colors']['accent']")
+                self._draw_progress_bar(self.exp_progress_canvas, wisdom_progress, THEME['colors']['accent'])
             
             # 金币面板已移除（V1.6.0）
                     
@@ -1190,7 +1190,7 @@ class TodoApp:
                 h = 24
             
             # 背景
-            canvas.create_rectangle(0, 0, w, h, fill="THEME['colors']['dark_alt']" if color == "THEME['colors']['accent']" else "THEME['colors']['dark_alt2']", outline="")
+            canvas.create_rectangle(0, 0, w, h, fill=THEME['colors']['dark_alt'] if color == THEME['colors']['accent'] else THEME['colors']['dark_alt2'], outline="")
             
             # 进度
             pw = int(w * max(0.0, min(1.0, progress)))
@@ -1278,7 +1278,7 @@ class TodoApp:
         self.task_entry.bind('<Return>', lambda e: self.add_task())
 
         add_btn = tk.Button(row0, text="✚ 领取新冒险", command=self.add_task,
-                            bg="THEME['colors']['primary']", fg="white", font=self.font_button,
+                            bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                             cursor="hand2", padx=20, pady=4)
         add_btn.pack(side=tk.RIGHT)
 
@@ -1339,13 +1339,13 @@ class TodoApp:
         style.configure('Treeview.Heading', font=self.font_table_header)
         
         # Title bar
-        title_frame = tk.Frame(self.root, bg="THEME['colors']['title_bar']", height=60)
+        title_frame = tk.Frame(self.root, bg=THEME['colors']['title_bar'], height=60)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
         
-        title_label = tk.Label(title_frame, text="冒险者的游戏",
+        title_label = tk.Label(title_frame, text=THEME['title'],
                                font=self.font_title,
-                               bg="THEME['colors']['title_bar']", fg="white")
+                               bg=THEME['colors']['title_bar'], fg="white")
         title_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
         # Input area (pack layout — reliable)
@@ -1355,7 +1355,7 @@ class TodoApp:
         style = ttk.Style()
         style.configure("TNotebook.Tab", padding=[12, 8], font=self.font_label)
         style.map("TNotebook.Tab",
-            background=[("selected", "THEME['colors']['panel_bg']")])  # Light gray when selected/focused
+            background=[("selected", THEME['colors']['panel_bg'])])  # Light gray when selected/focused
         
         notebook = ttk.Notebook(self.root)
         self.notebook = notebook
@@ -1379,13 +1379,13 @@ class TodoApp:
         self._emoji_cache = {}
         self._emoji_fonts = {}
         self._emoji_font_path = self._find_emoji_font()
-        self.status_frame = tk.Frame(self.root, bg="THEME['colors']['status_bar']")
+        self.status_frame = tk.Frame(self.root, bg=THEME['colors']['status_bar'])
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
-        self.status_icon = tk.Label(self.status_frame, bg="THEME['colors']['status_bar']")
+        self.status_icon = tk.Label(self.status_frame, bg=THEME['colors']['status_bar'])
         self.status_icon.pack(side=tk.LEFT, padx=(10, 0))
         self.status_text = tk.Label(self.status_frame, text="准备开始新的冒险！",
                                     font=("Microsoft YaHei", 10),
-                                    bg="THEME['colors']['status_bar']", fg="#333333",
+                                    bg=THEME['colors']['status_bar'], fg="#333333",
                                     anchor=tk.W, padx=2, pady=4)
         self.status_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.set_status("⚔️ 准备开始新的冒险！")
@@ -1771,7 +1771,7 @@ class TodoApp:
             tk.Button(btn_frame, text="取消", command=dialog.destroy,
                      font=self.font_button, padx=20, pady=5).pack(side=tk.LEFT, padx=(0, 10))
             tk.Button(btn_frame, text="✅ 保存", command=save_edit,
-                     bg="THEME['colors']['primary']", fg="white", font=self.font_button,
+                     bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                      cursor="hand2", padx=20, pady=5).pack(side=tk.LEFT)
             
             # Bind Enter key to save
@@ -1808,7 +1808,7 @@ class TodoApp:
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 16))
 
         tk.Button(toolbar, text="📤 导出战绩", command=self.export_completed,
-                  bg="THEME['colors']['primary']", fg="white", font=self.font_button,
+                  bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
         
@@ -1900,14 +1900,14 @@ class TodoApp:
     def setup_stats_tab(self, parent):
         """Setup statistics tab with growth system panels + overview tables"""
         # ── 可滚动容器：解决战绩内容超长无法滚轮查看 ──
-        stats_canvas = tk.Canvas(parent, bg="THEME['colors']['panel_bg']", highlightthickness=0)
+        stats_canvas = tk.Canvas(parent, bg=THEME['colors']['panel_bg'], highlightthickness=0)
         stats_scrollbar = ttk.Scrollbar(parent, orient="vertical",
                                         command=stats_canvas.yview)
         stats_canvas.configure(yscrollcommand=stats_scrollbar.set)
         stats_scrollbar.pack(side="right", fill="y")
         stats_canvas.pack(side="left", fill="both", expand=True)
 
-        container = tk.Frame(stats_canvas, bg="THEME['colors']['panel_bg']")
+        container = tk.Frame(stats_canvas, bg=THEME['colors']['panel_bg'])
         container_id = stats_canvas.create_window((0, 0), window=container, anchor="nw")
 
         def _sync_stats_width(event=None):
@@ -1928,40 +1928,40 @@ class TodoApp:
 
         stats_canvas.bind_all("<MouseWheel>", _on_stats_mousewheel)
         # ── 0. 成长系统面板（顶部，两个独立面板）──
-        growth_outer = tk.Frame(container, bg="THEME['colors']['panel_bg']")
+        growth_outer = tk.Frame(container, bg=THEME['colors']['panel_bg'])
         growth_outer.pack(fill=tk.X, padx=10, pady=(10, 8))
         
-        growth_frame = tk.Frame(growth_outer, bg="THEME['colors']['panel_bg']")
+        growth_frame = tk.Frame(growth_outer, bg=THEME['colors']['panel_bg'])
         growth_frame.pack(fill=tk.X)
         
         # ── 0a. 本周黄金之路面板（V1.6.0：移除金币系统，改为每周智慧）──
-        exp_card = tk.Frame(growth_frame, bg="THEME['colors']['title_bar']")
+        exp_card = tk.Frame(growth_frame, bg=THEME['colors']['title_bar'])
         exp_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         tk.Label(exp_card, text="🏆 本周黄金之路", font=("Microsoft YaHei", 13, "bold"),
-                 bg="THEME['colors']['title_bar']", fg="THEME['colors']['status_bar']").pack(anchor=tk.W)
+                 bg=THEME['colors']['title_bar'], fg=THEME['colors']['status_bar']).pack(anchor=tk.W)
         
         self.exp_rank_label = tk.Label(
             exp_card, text="菜鸟路人 | Lv.1", font=("Microsoft YaHei", 22, "bold"),
-            bg="THEME['colors']['title_bar']", fg="THEME['colors']['accent']"
+            bg=THEME['colors']['title_bar'], fg=THEME['colors']['accent']
         )
         self.exp_rank_label.pack(pady=(6, 2))
         
         # 本周进度（剩余天数）
         self.exp_daily_label = tk.Label(
             exp_card, text="📅 本周第1天，剩余6天", font=("Microsoft YaHei", 12, "bold"),
-            bg="THEME['colors']['title_bar']", fg="#2ECC71"
+            bg=THEME['colors']['title_bar'], fg="#2ECC71"
         )
         self.exp_daily_label.pack(pady=(0, 4))
         
         # 智慧进度条（Canvas绘制）
         self.exp_progress_canvas = tk.Canvas(exp_card, width=320, height=24,
-                                              bg="THEME['colors']['dark_alt']", highlightthickness=0)
+                                              bg=THEME['colors']['dark_alt'], highlightthickness=0)
         self.exp_progress_canvas.pack(pady=(4, 2))
         
         self.exp_detail_label = tk.Label(
             exp_card, text="0/60 智慧 → 见习旅者 (Lv.2)", font=("Microsoft YaHei", 10),
-            bg="THEME['colors']['title_bar']", fg="#BDC3C7"
+            bg=THEME['colors']['title_bar'], fg="#BDC3C7"
         )
         self.exp_detail_label.pack(anchor=tk.W, pady=(2, 0))
         
@@ -1979,17 +1979,17 @@ class TodoApp:
                                     lambda e: self.refresh_stats())
         
         # ── 实时时钟（选择周 右侧显示，描边幽灵牌：浅灰底+蓝描边+蓝色线条时钟+蓝字）──
-        self.clock_frame = tk.Frame(filter_frame, bg="THEME['colors']['panel_bg']",
-                                    highlightbackground="THEME['colors']['primary']", highlightthickness=1,
+        self.clock_frame = tk.Frame(filter_frame, bg=THEME['colors']['panel_bg'],
+                                    highlightbackground=THEME['colors']['primary'], highlightthickness=1,
                                     bd=0, relief="flat")
         self.clock_frame.pack(side=tk.RIGHT, padx=(10, 0))
         # 蓝色线条时钟图标（Canvas 绘制，规避 emoji 单色限制，颜色可控与描边同色）
         self.clock_canvas = tk.Canvas(self.clock_frame, width=16, height=16,
-                                      bg="THEME['colors']['panel_bg']", highlightthickness=0)
+                                      bg=THEME['colors']['panel_bg'], highlightthickness=0)
         self.clock_canvas.pack(side=tk.LEFT, padx=(6, 2))
         # 时间文字（深蓝，与界面主色一致）
-        self.clock_text = tk.Label(self.clock_frame, text="", fg="THEME['colors']['title_bar']",
-                                   bg="THEME['colors']['panel_bg']", font=self.font_label)
+        self.clock_text = tk.Label(self.clock_frame, text="", fg=THEME['colors']['title_bar'],
+                                   bg=THEME['colors']['panel_bg'], font=self.font_label)
         self.clock_text.pack(side=tk.LEFT, padx=(0, 6))
         self._update_clock()
         
@@ -2008,7 +2008,7 @@ class TodoApp:
         card_data = [
             ("🚀 进行中", self.stat_pending, "#F0AD4E"),
             ("🏁 已通关", self.stat_completed, "#5CB85C"),
-            ("📊 通关率", self.stat_rate, "THEME['colors']['primary']"),
+            ("📊 通关率", self.stat_rate, THEME['colors']['primary']),
         ]
         for i, (label, var, bg) in enumerate(card_data):
             card = tk.Frame(card_frame, bg=bg, padx=20, pady=8)
@@ -2412,7 +2412,7 @@ class TodoApp:
             dialog.destroy()
         
         tk.Button(btn_frame, text="✚ 保存修改", command=save_edit,
-                  bg="THEME['colors']['primary']", fg="white", font=self.font_button,
+                  bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                   cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT, padx=(10, 0))
         
         tk.Button(btn_frame, text="取消", command=dialog.destroy,
@@ -3107,7 +3107,7 @@ class TodoApp:
             dialog.destroy()
         
         tk.Button(btn_frame, text="✅ 领取冒险", command=save_new_task,
-                  bg="THEME['colors']['primary']", fg="white", font=self.font_button,
+                  bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                   cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT, padx=(10, 0))
         
         tk.Button(btn_frame, text="取消", command=dialog.destroy,
@@ -3487,7 +3487,7 @@ class TodoApp:
         """在 16x16 Canvas 上绘制蓝色线条时钟（圆 + 时分秒针），颜色与描边同色"""
         canvas.delete("all")
         cx, cy, r = 8, 8, 6
-        canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline="THEME['colors']['primary']", width=1.5)
+        canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline=THEME['colors']['primary'], width=1.5)
         # 指针角度：12 点方向为 0，顺时针。Tk 的 y 轴向下，故 y 取负
         sec = now.second / 60.0
         minute = (now.minute + now.second / 60.0) / 60.0
@@ -3495,15 +3495,15 @@ class TodoApp:
         # 秒针（蓝，细）
         sx = cx + (r - 1) * math.sin(sec * 2 * math.pi)
         sy = cy - (r - 1) * math.cos(sec * 2 * math.pi)
-        canvas.create_line(cx, cy, sx, sy, fill="THEME['colors']['primary']", width=1)
+        canvas.create_line(cx, cy, sx, sy, fill=THEME['colors']['primary'], width=1)
         # 分针（深蓝，中）
         mx = cx + (r - 2) * math.sin(minute * 2 * math.pi)
         my = cy - (r - 2) * math.cos(minute * 2 * math.pi)
-        canvas.create_line(cx, cy, mx, my, fill="THEME['colors']['title_bar']", width=1.2)
+        canvas.create_line(cx, cy, mx, my, fill=THEME['colors']['title_bar'], width=1.2)
         # 时针（深蓝，粗）
         hx = cx + (r - 3) * math.sin(hour * 2 * math.pi)
         hy = cy - (r - 3) * math.cos(hour * 2 * math.pi)
-        canvas.create_line(cx, cy, hx, hy, fill="THEME['colors']['title_bar']", width=1.4)
+        canvas.create_line(cx, cy, hx, hy, fill=THEME['colors']['title_bar'], width=1.4)
 
     def _on_resize(self, event):
         """窗口尺寸变化回调（V1.6.18）：仅当『从最大化→还原』这一跳变时，
