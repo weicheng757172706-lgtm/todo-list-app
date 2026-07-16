@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.9"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.8 清单套tab/卡片改名+主题化收尾；V1.8.9 代码审查优化——修复 validate_person_name 崩溃、移除已取消的彩色 emoji 死代码、删除与钉死列宽冲突的 auto_resize、合并 load_data 重复落盘、抽离 _complete_task_by_id 去重、清理冗余 import 与死方法
+VERSION = "V1.9.0"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.9 代码审查优化；V1.9.0 修复进行中页「缩小后/首开小窗口」横向滚动条溢出——弹性列最小保底 col_desc 150→110、领取时间列 150→140，确保首开与全屏还原后所有列完整可见、无滚动条（按韦老板截图标准）
 
 import json
 import os
@@ -1309,7 +1309,7 @@ class TodoApp:
         col_minwidths = {
             '☑️': 30,
             '编号': 50,
-            self.T['col_desc']: 150,
+            self.T['col_desc']: 110,
             self.T['col_type']: 95,
             self.T['col_priority']: 95,
             self.T['col_owner']: 85,
@@ -1329,7 +1329,7 @@ class TodoApp:
             elif col != self.T['col_receive']:  # 领取时间单独在循环外处理
                 self.pending_tree.column(col, stretch=False, width=w, minwidth=mw, anchor=anchor)
         # 时间列不参与拉伸压缩，窗口缩小时始终完整显示时间戳（V1.6.19）
-        self.pending_tree.column(self.T['col_receive'], stretch=False, width=150, minwidth=150)
+        self.pending_tree.column(self.T['col_receive'], stretch=False, width=140, minwidth=140)
         
         vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.pending_tree.yview)
         hsb = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.pending_tree.xview)
