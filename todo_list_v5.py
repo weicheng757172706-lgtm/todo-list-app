@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.8.7"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.6 更换图标主题「清单打勾」；V1.8.7 将界面文案+成长级别主题化（清单套映射为「工作任务管理器」文案与青铜/白银/铂金/钻石/大师/王者六级，双剑套保持原冒险文案）；列布局/窗口还原锁回900x650等保留
+VERSION = "V1.8.8"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.7 界面文案+成长级别主题化；V1.8.8 将「优先级档位名/类型选项/旧名迁移映射」也主题化（与档位名解耦：经验值·颜色·排序权重·加粗tag 按位置索引），清单套档位改为「重要紧急/重要不紧急/不重要紧急/不重要不紧急」、类型改为「工作任务/每日成长任务」、列标题紧急程度；双剑套保持原冒险档位不变
 
 import json
 import os
@@ -152,6 +152,20 @@ DEFAULT_THEME = {
         {"name": "传奇冒险家", "min": 401, "max": 500},
         {"name": "至尊冒险王", "min": 501, "max": 999999},
     ],
+    # ── 下拉选项（优先级/类型；按套覆盖，整块替换非深合并）──
+    # 注意：经验值/颜色/排序权重/加粗 tag 均按「位置索引」与档位名解耦，避免硬编码档位名。
+    "priority_options": ["红色警报", "修炼升级", "临时密令", "佛系摸鱼"],
+    "category_options": ["主线任务", "营地修行"],
+    # 旧档位名→当前档位名 迁移映射（双剑套默认；清单套在 theme.json 整块覆盖为反向）
+    "legacy_priority_map": {
+        "重要紧急": "红色警报", "重要不紧急": "修炼升级", "不重要紧急": "临时密令",
+        "不重要不紧急": "佛系摸鱼", "紧急Boss战": "红色警报", "主线任务": "修炼升级",
+        "突发委托": "临时密令", "摸鱼任务": "佛系摸鱼", "游击战": "佛系摸鱼"
+    },
+    "legacy_category_map": {
+        "工作任务": "主线任务", "每日任务": "营地修行", "重要冒险": "主线任务",
+        "每日修行": "营地修行", "搬砖任务": "主线任务"
+    },
 }
 
 
@@ -179,6 +193,10 @@ def load_theme():
                 with open(p, 'r', encoding='utf-8') as f:
                     override = json.load(f)
                 _deep_merge(theme, override)
+                # legacy 迁移映射整块覆盖（dict 深合并会叠加，需显式整块替换）
+                for _k in ('legacy_priority_map', 'legacy_category_map'):
+                    if _k in override:
+                        theme[_k] = override[_k]
             except Exception:
                 pass
             break
@@ -353,17 +371,16 @@ class TodoApp:
         
         self.data_file = os.path.join(base_path, "todo_data.json")
         
-        # Priority options (Eisenhower Matrix - gamified v7.9)
-        self.priority_options = ["红色警报", "修炼升级", "临时密令", "佛系摸鱼"]
-        self.priority_colors = {
-            "红色警报": "#FFCCCC",
-            "修炼升级": "#FFF2CC",
-            "临时密令": "#D9EAD3",
-            "佛系摸鱼": "#C9DAF8"
-        }
+        # Priority options (Eisenhower Matrix) —— 主题化：档位名按套不同，经验/颜色按位置解耦
+        self.priority_options = THEME['priority_options']
+        # 颜色按「位置索引」映射，与档位名解耦（顺序：最高→最低）
+        self.priority_colors = dict(zip(self.priority_options,
+                                        ["#FFCCCC", "#FFF2CC", "#D9EAD3", "#C9DAF8"]))
+        # 经验值按「位置索引」（顺序：最高20 → 最低5）
+        self.WISDOM_BY_PRIORITY = dict(zip(self.priority_options, [20, 20, 10, 5]))
 
-        # Task category options
-        self.category_options = ["主线任务", "营地修行"]
+        # Task category options —— 主题化
+        self.category_options = THEME['category_options']
         
         # Tag options (predefined tags for quick selection)
         self.predefined_tags = ["紧急", "重要", "待讨论", "进行中", "阻塞", "待审核"]
@@ -422,25 +439,9 @@ class TodoApp:
                         data["completed"] = []
 
                     # 迁移旧版分类名称（v9.0 改为冒险主题风格）
-                    category_map = {
-                        "工作任务": "主线任务",
-                        "每日任务": "营地修行",
-                        "重要冒险": "主线任务",
-                        "每日修行": "营地修行",
-                        "搬砖任务": "主线任务"
-                    }
+                    category_map = THEME['legacy_category_map']
                     # 迁移旧版优先级名称（v8.8 改为新版本）
-                    priority_map = {
-                        "重要紧急": "红色警报",
-                        "重要不紧急": "修炼升级",
-                        "不重要紧急": "临时密令",
-                        "不重要不紧急": "佛系摸鱼",
-                        "紧急Boss战": "红色警报",
-                        "主线任务": "修炼升级",
-                        "突发委托": "临时密令",
-                        "摸鱼任务": "佛系摸鱼",
-                        "游击战": "佛系摸鱼"
-                    }
+                    priority_map = THEME['legacy_priority_map']
                     migrated = False
                     for task in data["tasks"]:
                         old_cat = task.get("category", "")
@@ -505,7 +506,7 @@ class TodoApp:
                     # 会导致删除/恢复时已通关任务无法正确扣回本周智慧）— V1.6.2
                     for task in data["completed"]:
                         if "wisdom_gain" not in task:
-                            task["wisdom_gain"] = WISDOM_BY_PRIORITY.get(task.get("priority", ""), 5)
+                            task["wisdom_gain"] = self.WISDOM_BY_PRIORITY.get(task.get("priority", ""), 5)
 
                     if migrated or tags_migrated or subtasks_migrated:
                         # 静默保存迁移后的数据，不弹窗
@@ -1518,7 +1519,7 @@ class TodoApp:
         style.configure("Treeview.Heading", font=self.font_table_header)
         
         # 红色警报 任务加粗字体
-        self.pending_tree.tag_configure('红色警报', font=('Microsoft YaHei', 11, 'bold'))
+        self.pending_tree.tag_configure(self.priority_options[0], font=('Microsoft YaHei', 11, 'bold'))
         
         # 主线任务加粗（需求：进行中页主线加粗、支线不加粗；已通关页不动）
         self.pending_tree.tag_configure('main', font=('Microsoft YaHei', 12, 'bold'))
@@ -2215,7 +2216,7 @@ class TodoApp:
                 
                 # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
                 priority = task.get("priority", "")
-                amount = WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
+                amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
                 task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
                 self.add_wisdom(amount)
                 
@@ -2293,7 +2294,7 @@ class TodoApp:
                         
                         # V1.6.2：每周智慧系统 - 根据优先级计算智慧并记录到任务
                         priority = task.get("priority", "")
-                        amount = WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
+                        amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
                         task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
                         self.add_wisdom(amount)
                         
@@ -3222,22 +3223,12 @@ class TodoApp:
         # Sort tasks based on criteria
         if criteria == self.T['sort_default']:
             # 优先级排序：红色警报 > 修炼升级 > 临时密令 > 佛系摸鱼
-            priority_order = {
-                "红色警报": 1,
-                "修炼升级": 2,
-                "临时密令": 3,
-                "佛系摸鱼": 4
-            }
+            priority_order = dict(zip(self.priority_options, [1, 2, 3, 4]))
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: priority_order.get(t.get("priority", ""), 999))
         elif criteria == self.T['sort_priority']:
             # 按紧急程度排序（同默认顺序）
-            priority_order = {
-                "红色警报": 1,
-                "修炼升级": 2,
-                "临时密令": 3,
-                "佛系摸鱼": 4
-            }
+            priority_order = dict(zip(self.priority_options, [1, 2, 3, 4]))
             sorted_tasks = sorted(self.data["tasks"], 
                                key=lambda t: priority_order.get(t.get("priority", ""), 999))
         elif criteria == self.T['sort_created']:
@@ -3400,12 +3391,7 @@ class TodoApp:
             filtered_tasks.sort(key=lambda t: t.get("completed", ""), reverse=True)
         elif criteria == self.T['sort_priority']:
             # 按紧急程度排序
-            priority_order = {
-                "红色警报": 1,
-                "修炼升级": 2,
-                "临时密令": 3,
-                "佛系摸鱼": 4
-            }
+            priority_order = dict(zip(self.priority_options, [1, 2, 3, 4]))
             filtered_tasks.sort(key=lambda t: priority_order.get(t.get("priority", ""), 999))
         elif criteria == self.T['sort_created']:
             # 按创建时间排序（新到旧）

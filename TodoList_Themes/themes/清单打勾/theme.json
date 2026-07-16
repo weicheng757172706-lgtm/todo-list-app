@@ -6,7 +6,7 @@
   "text": {
     "col_desc": "📝 任务内容",
     "col_type": "🗺️ 任务类型",
-    "col_priority": "⚡ 红色警报",
+    "col_priority": "⚡ 紧急程度",
     "col_owner": "⚔️ 责任人",
     "col_tag": "🏷️ 备注",
     "col_progress": "📊 进展",
@@ -17,17 +17,20 @@
     "tab_stats": "📊 任务统计",
     "btn_mark": "🎯 标记完成",
     "btn_abandon": "🗑 删除任务",
+    "btn_edit": "✏ 编辑冒险",
     "btn_refresh": "🔄 刷新任务",
     "btn_clear": "🗑 清空任务",
     "btn_export": "📤 导出任务",
     "lbl_desc_add": "🎯 任务内容:",
     "lbl_desc_edit": "📝 任务内容:",
     "lbl_type": "🗺️ 任务类型:",
-    "lbl_priority": "⚡ 红色警报:",
+    "lbl_priority": "⚡ 紧急程度:",
     "lbl_owner": "⚔️ 责任人:",
-    "stat_priority": "⚡ 按红色警报",
+    "stat_priority": "⚡ 按紧急程度",
     "stat_category": "🗺️ 按任务类型",
-    "sort_priority": "按红色警报",
+    "sort_default": "默认顺序",
+    "sort_priority": "按紧急程度",
+    "sort_created": "按创建时间",
     "sort_desc": "按任务内容",
     "sort_completed": "按完成时间",
     "export_title": "📤 导出任务",
@@ -45,5 +48,17 @@
     {"name": "钻石", "min": 301, "max": 400},
     {"name": "大师", "min": 401, "max": 500},
     {"name": "王者", "min": 501, "max": 999999}
-  ]
+  ],
+  "priority_options": ["重要紧急", "重要不紧急", "不重要紧急", "不重要不紧急"],
+  "category_options": ["工作任务", "每日成长任务"],
+  "legacy_priority_map": {
+    "红色警报": "重要紧急",
+    "修炼升级": "重要不紧急",
+    "临时密令": "不重要紧急",
+    "佛系摸鱼": "不重要不紧急"
+  },
+  "legacy_category_map": {
+    "主线任务": "工作任务",
+    "营地修行": "每日成长任务"
+  }
 }
