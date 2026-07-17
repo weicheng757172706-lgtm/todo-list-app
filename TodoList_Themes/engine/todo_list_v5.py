@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.9.2"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.9.0 修复进行中页缩小后横向滚动条溢出；V1.9.1 清单套新增应用内标题栏图标(B公文夹对勾)；V1.9.2 清单套界面 emoji/文案整体主题化——抽 text 字典+约36处硬编码(经验卡/日期统计/成就/状态栏/对话框/右键菜单)为可主题字段，清单套覆盖为「清单勾选风」工作图标(📋👤⚠️✅🕐📈…)与任务文案，双剑套默认零改动
+VERSION = "V1.9.7"  # 版本号按 V.A.B.C 新规（逢10进1）。V1.9.7 彻底移除独立「成就解锁」系统（窗口+判定+数据），仅保留成长系统(等级/经验/称号)；双剑/清单同步升版
 
 import json
 import os
@@ -144,21 +144,10 @@ DEFAULT_THEME = {
         "date_stat_title": "📅 按日期统计（已通关）",
         "date_col": "📅 日期",
         "done_count_col": "🏁 通关数",
-        "ach_first_title": "🎉 初次冒险！",
-        "ach_first_sub": "完成第一个冒险",
-        "ach_ten_title": "🏆 初出茅庐",
-        "ach_ten_sub": "完成10个冒险",
-        "ach_fifty_title": "⭐ 冒险老手",
-        "ach_fifty_sub": "完成50个冒险",
-        "ach_hundred_title": "👑 传奇冒险家",
-        "ach_hundred_sub": "完成100个冒险",
         "levelup_title": "🎉 等级提升！",
         "levelup_msg": "等级提升！",
         "levelup_icon": "🎉",
         "levelup_btn": "继续冒险！",
-        "achievement_title": "🏆 成就解锁！",
-        "achievement_icon": "🏆",
-        "achievement_btn": "太棒了！",
         "complete_msg": "🎉 恭喜您冒险已完成！！！",
         "complete_emoji": "🎉",
         "complete_title": "恭喜您，冒险已完成！",
@@ -537,7 +526,7 @@ class TodoApp:
         return {"tasks": [], "completed": []}
     
     def load_game_data(self):
-        """Load game data (level, exp, achievements, attributes)."""
+        """Load game data (level, exp, attributes)."""
         # Game data is stored in the main data file under "game" key
         game_file = self.data_file.replace("todo_data.json", "game_data.json")
 
@@ -556,9 +545,6 @@ class TodoApp:
             "weekly_level": 1,  # 本周等级（1-6）
             "week_start_date": monday_str,  # 本周开始日期（周一的日期），默认初始化为当前周一
             "weekly_history": [],  # 历史周报记录
-
-            # 成就系统
-            "achievements": [],
 
             # 统计信息
             "stats": {
@@ -724,33 +710,6 @@ class TodoApp:
         except Exception:
             pass
 
-    def check_achievements(self, task):
-        """Check and unlock achievements based on task completion."""
-        achievements = self.game_data["achievements"]
-        stats = self.game_data["stats"]
-        
-        # Achievement: First completion
-        if "first_completion" not in achievements and stats["total_completed"] == 1:
-            achievements.append("first_completion")
-            self.show_achievement_animation(self.T['ach_first_title'], self.T['ach_first_sub'])
-        
-        # Achievement: Complete 10 tasks
-        if "complete_10" not in achievements and stats["total_completed"] == 10:
-            achievements.append("complete_10")
-            self.show_achievement_animation(self.T['ach_ten_title'], self.T['ach_ten_sub'])
-        
-        # Achievement: Complete 50 tasks
-        if "complete_50" not in achievements and stats["total_completed"] == 50:
-            achievements.append("complete_50")
-            self.show_achievement_animation(self.T['ach_fifty_title'], self.T['ach_fifty_sub'])
-        
-        # Achievement: Complete 100 tasks
-        if "complete_100" not in achievements and stats["total_completed"] == 100:
-            achievements.append("complete_100")
-            self.show_achievement_animation(self.T['ach_hundred_title'], self.T['ach_hundred_sub'])
-        
-        self.save_game_data()
-    
     def show_wisdom_animation(self, amount):
         """Show wisdom gain animation (V1.6.0)."""
         if self.animation_label:
@@ -819,28 +778,6 @@ class TodoApp:
         tk.Button(level_up_window, text=self.T['levelup_btn'], command=level_up_window.destroy,
                  font=("Microsoft YaHei", 12), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
         self._apply_emoji_images(level_up_window)
-    
-    def show_achievement_animation(self, title, description):
-        """Show achievement unlock animation."""
-        achievement_window = tk.Toplevel(self.root)
-        achievement_window.title(self.T['achievement_title'])
-        achievement_window.geometry("350x180")
-        achievement_window.transient(self.root)
-        
-        # Center the window
-        achievement_window.update_idletasks()
-        x = (achievement_window.winfo_screenwidth() // 2) - (350 // 2)
-        y = (achievement_window.winfo_screenheight() // 2) - (180 // 2)
-        achievement_window.geometry(f"350x180+{x}+{y}")
-        
-        tk.Label(achievement_window, text=self.T['achievement_icon'], font=("Microsoft YaHei", 36)).pack(pady=15)
-        tk.Label(achievement_window, text=f"成就解锁！", font=("Microsoft YaHei", 14, "bold")).pack()
-        tk.Label(achievement_window, text=title, font=("Microsoft YaHei", 12, "bold"), fg="#FFD700").pack(pady=5)
-        tk.Label(achievement_window, text=description, font=("Microsoft YaHei", 10)).pack()
-        
-        tk.Button(achievement_window, text=self.T['achievement_btn'], command=achievement_window.destroy,
-                 font=("Microsoft YaHei", 10), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
-        self._apply_emoji_images(achievement_window)
     
     def show_new_task_animation(self):
         """Show new task added animation."""
@@ -2080,7 +2017,6 @@ class TodoApp:
         amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
         task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
         self.add_wisdom(amount)
-        self.check_achievements(task)
         self.save_game_data()
         self.update_game_display()
 
