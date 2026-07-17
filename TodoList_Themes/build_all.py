@@ -59,6 +59,18 @@ def build_one(theme_dir):
         "--icon", icon_path,
         "--add-data", f"{tj};.",
         "--add-data", f"{icon_path};.",
+    ]
+    # 标题栏图标（如配置 title_icon）—— 一并内嵌
+    title_icon = cfg.get("title_icon")
+    if title_icon:
+        title_icon_path = os.path.join(theme_dir, title_icon)
+        if os.path.exists(title_icon_path):
+            cmd.append("--add-data")
+            cmd.append(f"{title_icon_path};.")
+            print(f"  title_icon: {title_icon_path}")
+        else:
+            print(f"[警告] {theme_dir} 缺少标题栏图标 {title_icon}（将回退纯文字）")
+    cmd += [
         "--hidden-import", "tkinter",
         "--hidden-import", "tkinter.ttk",
         "--hidden-import", "tkinter.font",

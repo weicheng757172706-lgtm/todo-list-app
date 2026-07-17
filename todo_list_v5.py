@@ -6,7 +6,7 @@ Features: Excel-like table, priority matrix, category, person field, persistent 
 Layout: pack() based for reliable visibility
 """
 
-VERSION = "V1.9.0"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.8.9 代码审查优化；V1.9.0 修复进行中页「缩小后/首开小窗口」横向滚动条溢出——弹性列最小保底 col_desc 150→110、领取时间列 150→140，确保首开与全屏还原后所有列完整可见、无滚动条（按韦老板截图标准）
+VERSION = "V1.9.2"  # 版本号按 V.A.B.C 新规（逢10进1）：V1.9.0 修复进行中页缩小后横向滚动条溢出；V1.9.1 清单套新增应用内标题栏图标(B公文夹对勾)；V1.9.2 清单套界面 emoji/文案整体主题化——抽 text 字典+约36处硬编码(经验卡/日期统计/成就/状态栏/对话框/右键菜单)为可主题字段，清单套覆盖为「清单勾选风」工作图标(📋👤⚠️✅🕐📈…)与任务文案，双剑套默认零改动
 
 import json
 import os
@@ -130,6 +130,56 @@ DEFAULT_THEME = {
         "warn_enter_desc": "🎯 请输入冒险描述！",
         "valid_owner": "冒险者名称不能超过100个字符！",
         "edit_dlg_title": "✏️ 编辑冒险 #",
+        # ── 经验/日期/成就等（原硬编码，抽主题以便清单套去冒险味）──
+        "exp_card_title": "🏆 本周黄金之路",
+        "exp_daily": "📅 本周第{}天，剩余{}天",
+        "date_stat_title": "📅 按日期统计（已通关）",
+        "date_col": "📅 日期",
+        "done_count_col": "🏁 通关数",
+        "ach_first_title": "🎉 初次冒险！",
+        "ach_first_sub": "完成第一个冒险",
+        "ach_ten_title": "🏆 初出茅庐",
+        "ach_ten_sub": "完成10个冒险",
+        "ach_fifty_title": "⭐ 冒险老手",
+        "ach_fifty_sub": "完成50个冒险",
+        "ach_hundred_title": "👑 传奇冒险家",
+        "ach_hundred_sub": "完成100个冒险",
+        "levelup_title": "🎉 等级提升！",
+        "levelup_icon": "🎉",
+        "levelup_btn": "继续冒险！",
+        "achievement_title": "🏆 成就解锁！",
+        "achievement_icon": "🏆",
+        "achievement_btn": "太棒了！",
+        "complete_msg": "🎉 恭喜您冒险已完成！！！",
+        "wisdom_anim": "🧠 智慧 +{} 🧠",
+        # ── 状态栏 / 对话框 / 右键菜单 / 提示（原硬编码，抽主题以便清单套去冒险味）──
+        "msg_new_task_gen": "🎯 新冒险已生成！",
+        "btn_add_task": "✚ 领取新冒险",
+        "status_ready": "准备开始新的冒险！",
+        "status_ready_icon": "⚔️ 准备开始新的冒险！",
+        "ctx_new_task": "🎯 领取新冒险",
+        "warn_select_sub": "请选择要接取支线的冒险！",
+        "err_not_found": "未找到该冒险！",
+        "warn_select_sub_manage": "请选择要管理支线任务的冒险！",
+        "btn_del_completed": "🗑 删除冒险",
+        "ctx_restore": "🔄 恢复冒险",
+        "ctx_del_completed": "🗑 删除冒险",
+        "status_task_received": "🎯 冒险已领取：{}",
+        "err_new_task": "🎯 领取新冒险出错",
+        "warn_select_complete": "🎮 请选择要通关的冒险！",
+        "status_task_done": "🏁 冒险已通关！",
+        "warn_select_abandon": "🗑️ 请选择要放弃的冒险！",
+        "confirm_abandon": "🗑️ 确定要放弃这个冒险吗？\n\n冒险: {}",
+        "status_abandoned": "🗑️ 冒险已放弃！",
+        "warn_select_edit": "🎮 请选择要编辑的冒险！",
+        "err_not_found_edit": "🎮 未找到该冒险！",
+        "status_task_updated": "✏️ 冒险已更新: {}",
+        "warn_select_restore": "🔄 请选择要恢复的冒险！",
+        "status_task_restored": "🔄 冒险已恢复：{}（扣回 {} 智慧）",
+        "confirm_del_done": "🗑️ 确定要删除该已通关记录吗？\n\n冒险: {}\n\n⚠️ 此操作将扣回 {} 智慧（历史总智慧同步减少），本周等级可能下降",
+        "dlg_title_add": "🎯 接取新冒险",
+        "dlg_title_receive": "🎯 领取新冒险",
+        "btn_save_new": "✅ 领取冒险",
     },
     # ── 成长级别（Lv + 称号 + 经验阈值；阈值同原冒险体系，称号可按套覆盖）──
     "levels": [
@@ -665,22 +715,22 @@ class TodoApp:
         # Achievement: First completion
         if "first_completion" not in achievements and stats["total_completed"] == 1:
             achievements.append("first_completion")
-            self.show_achievement_animation("🎉 初次冒险！", "完成第一个冒险")
+            self.show_achievement_animation(self.T['ach_first_title'], self.T['ach_first_sub'])
         
         # Achievement: Complete 10 tasks
         if "complete_10" not in achievements and stats["total_completed"] == 10:
             achievements.append("complete_10")
-            self.show_achievement_animation("🏆 初出茅庐", "完成10个冒险")
+            self.show_achievement_animation(self.T['ach_ten_title'], self.T['ach_ten_sub'])
         
         # Achievement: Complete 50 tasks
         if "complete_50" not in achievements and stats["total_completed"] == 50:
             achievements.append("complete_50")
-            self.show_achievement_animation("⭐ 冒险老手", "完成50个冒险")
+            self.show_achievement_animation(self.T['ach_fifty_title'], self.T['ach_fifty_sub'])
         
         # Achievement: Complete 100 tasks
         if "complete_100" not in achievements and stats["total_completed"] == 100:
             achievements.append("complete_100")
-            self.show_achievement_animation("👑 传奇冒险家", "完成100个冒险")
+            self.show_achievement_animation(self.T['ach_hundred_title'], self.T['ach_hundred_sub'])
         
         self.save_game_data()
     
@@ -691,7 +741,7 @@ class TodoApp:
         
         self.animation_label = tk.Label(
             self.root,
-            text=f"🧠 智慧 +{amount} 🧠",
+            text=self.T['wisdom_anim'].format(amount),
             font=("Microsoft YaHei", 24, "bold"),
             fg="#9B59B6",
             bg="#2B2B2B"
@@ -729,7 +779,7 @@ class TodoApp:
     def show_level_up_animation(self):
         """Show level up animation (V1.6.0：每周智慧系统)."""
         level_up_window = tk.Toplevel(self.root)
-        level_up_window.title("🎉 等级提升！")
+        level_up_window.title(self.T['levelup_title'])
         level_up_window.geometry("320x220")
         level_up_window.transient(self.root)
         level_up_window.grab_set()
@@ -744,19 +794,19 @@ class TodoApp:
         title = self.get_wisdom_title(level)
         wisdom = self.game_data.get('weekly_wisdom', 0)
         
-        tk.Label(level_up_window, text="🎉", font=("Microsoft YaHei", 48)).pack(pady=15)
+        tk.Label(level_up_window, text=self.T['levelup_icon'], font=("Microsoft YaHei", 48)).pack(pady=15)
         tk.Label(level_up_window, text=f"等级提升！", font=("Microsoft YaHei", 16, "bold")).pack()
         tk.Label(level_up_window, text=f"{title} | Lv.{level}", font=("Microsoft YaHei", 14, "bold"), fg=THEME['colors']['accent']).pack(pady=8)
         tk.Label(level_up_window, text=f"本周智慧: {wisdom}", font=("Microsoft YaHei", 12)).pack()
         
-        tk.Button(level_up_window, text="继续冒险！", command=level_up_window.destroy,
+        tk.Button(level_up_window, text=self.T['levelup_btn'], command=level_up_window.destroy,
                  font=("Microsoft YaHei", 12), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
         self._apply_emoji_images(level_up_window)
     
     def show_achievement_animation(self, title, description):
         """Show achievement unlock animation."""
         achievement_window = tk.Toplevel(self.root)
-        achievement_window.title("🏆 成就解锁！")
+        achievement_window.title(self.T['achievement_title'])
         achievement_window.geometry("350x180")
         achievement_window.transient(self.root)
         
@@ -766,12 +816,12 @@ class TodoApp:
         y = (achievement_window.winfo_screenheight() // 2) - (180 // 2)
         achievement_window.geometry(f"350x180+{x}+{y}")
         
-        tk.Label(achievement_window, text="🏆", font=("Microsoft YaHei", 36)).pack(pady=15)
+        tk.Label(achievement_window, text=self.T['achievement_icon'], font=("Microsoft YaHei", 36)).pack(pady=15)
         tk.Label(achievement_window, text=f"成就解锁！", font=("Microsoft YaHei", 14, "bold")).pack()
         tk.Label(achievement_window, text=title, font=("Microsoft YaHei", 12, "bold"), fg="#FFD700").pack(pady=5)
         tk.Label(achievement_window, text=description, font=("Microsoft YaHei", 10)).pack()
         
-        tk.Button(achievement_window, text="太棒了！", command=achievement_window.destroy,
+        tk.Button(achievement_window, text=self.T['achievement_btn'], command=achievement_window.destroy,
                  font=("Microsoft YaHei", 10), bg=THEME['colors']['primary'], fg="white").pack(pady=15)
         self._apply_emoji_images(achievement_window)
     
@@ -782,7 +832,7 @@ class TodoApp:
         
         self.animation_label = tk.Label(
             self.root,
-            text="🎯 新冒险已生成！",
+            text=self.T['msg_new_task_gen'],
             font=("Microsoft YaHei", 20, "bold"),
             fg="#00AA00",
             bg=THEME['colors']['panel_bg']
@@ -885,7 +935,7 @@ class TodoApp:
         # Add celebration text
         text_id = canvas.create_text(
             center_x, center_y - 40,
-            text="🎉 恭喜您冒险已完成！！！",
+            text=self.T['complete_msg'],
             font=("Microsoft YaHei", 16, "bold"),
             fill="#000000"
         )
@@ -978,7 +1028,7 @@ class TodoApp:
                 monday = today - timedelta(days=today.weekday())
                 days_passed = (today - monday).days + 1
                 days_left = 7 - days_passed
-                self._set_emoji_text(self.exp_daily_label, f"📅 本周第{days_passed}天，剩余{days_left}天")
+                self._set_emoji_text(self.exp_daily_label, self.T['exp_daily'].format(days_passed, days_left))
             if hasattr(self, 'exp_detail_label'):
                 if weekly_level >= 6:
                     self.exp_detail_label.config(text=f"{weekly_wisdom} 智慧 (已满级)")
@@ -1091,7 +1141,7 @@ class TodoApp:
         self.task_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 12))
         self.task_entry.bind('<Return>', lambda e: self.add_task())
 
-        add_btn = tk.Button(row0, text="✚ 领取新冒险", command=self.add_task,
+        add_btn = tk.Button(row0, text=self.T['btn_add_task'], command=self.add_task,
                             bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                             cursor="hand2", padx=20, pady=4)
         add_btn.pack(side=tk.RIGHT)
@@ -1156,12 +1206,28 @@ class TodoApp:
         title_frame = tk.Frame(self.root, bg=THEME['colors']['title_bar'], height=60)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
-        
-        title_label = tk.Label(title_frame, text=THEME['title'],
+
+        # 居中内层组：图标 + 文字（紧凑排列，间距 padx=3）
+        title_center = tk.Frame(title_frame, bg=THEME['colors']['title_bar'])
+        title_center.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+        title_icon_file = THEME.get('title_icon')
+        if title_icon_file:
+            try:
+                _ti_base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+                _ti_path = os.path.join(_ti_base, title_icon_file)
+                if os.path.exists(_ti_path):
+                    self._title_icon_img = tk.PhotoImage(file=_ti_path)
+                    tk.Label(title_center, image=self._title_icon_img,
+                             bg=THEME['colors']['title_bar']).pack(side=tk.LEFT, padx=(0, 3))
+            except Exception:
+                self._title_icon_img = None  # 加载失败回退纯文字
+
+        title_label = tk.Label(title_center, text=THEME['title'],
                                font=self.font_title,
                                bg=THEME['colors']['title_bar'], fg="white")
-        title_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        
+        title_label.pack(side=tk.LEFT)
+
         # Input area (pack layout — reliable)
         self._build_input_area()
 
@@ -1194,12 +1260,12 @@ class TodoApp:
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_icon = tk.Label(self.status_frame, bg=THEME['colors']['status_bar'])
         self.status_icon.pack(side=tk.LEFT, padx=(10, 0))
-        self.status_text = tk.Label(self.status_frame, text="准备开始新的冒险！",
+        self.status_text = tk.Label(self.status_frame, text=self.T['status_ready'],
                                     font=("Microsoft YaHei", 10),
                                     bg=THEME['colors']['status_bar'], fg="#333333",
                                     anchor=tk.W, padx=2, pady=4)
         self.status_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.set_status("⚔️ 准备开始新的冒险！")
+        self.set_status(self.T['status_ready_icon'])
 
         # Update game display initially
         self.update_game_display()
@@ -1379,7 +1445,7 @@ class TodoApp:
                     context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
             else:
                 # No task selected - show menu with add/refresh
-                context_menu.add_command(label="🎯 领取新冒险", command=self.show_add_task_dialog)
+                context_menu.add_command(label=self.T['ctx_new_task'], command=self.show_add_task_dialog)
                 context_menu.add_separator()
                 context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
             
@@ -1392,7 +1458,7 @@ class TodoApp:
         try:
             selection = self.pending_tree.selection()
             if not selection:
-                messagebox.showwarning("警告", "请选择要接取支线的冒险！")
+                messagebox.showwarning("警告", self.T['warn_select_sub'])
                 return
             
             task_id = int(selection[0])
@@ -1403,7 +1469,7 @@ class TodoApp:
                     break
             
             if not task:
-                messagebox.showerror("错误", "未找到该冒险！")
+                messagebox.showerror("错误", self.T['err_not_found'])
                 return
             
             # Directly show the add subtask dialog
@@ -1416,7 +1482,7 @@ class TodoApp:
         try:
             selection = self.pending_tree.selection()
             if not selection:
-                messagebox.showwarning("警告", "请选择要管理支线任务的冒险！")
+                messagebox.showwarning("警告", self.T['warn_select_sub_manage'])
                 return
             
             task_id = int(selection[0])
@@ -1427,7 +1493,7 @@ class TodoApp:
                     break
             
             if not task:
-                messagebox.showerror("错误", "未找到该冒险！")
+                messagebox.showerror("错误", self.T['err_not_found'])
                 return
             
             self.manage_subtasks(task)
@@ -1610,7 +1676,7 @@ class TodoApp:
         toolbar = tk.Frame(parent)
         toolbar.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Button(toolbar, text="🗑 删除冒险", command=self.delete_completed,
+        tk.Button(toolbar, text=self.T['btn_del_completed'], command=self.delete_completed,
                   bg="#E67E22", fg="white", font=self.font_button,
                   cursor="hand2", padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
 
@@ -1692,8 +1758,8 @@ class TodoApp:
         # 绑定右键菜单
         self.completed_tree.bind('<Button-3>', self.show_completed_context_menu)
         self.completed_context_menu = tk.Menu(self.root, tearoff=0, font=self.font_label)
-        self.completed_context_menu.add_command(label="🔄 恢复冒险", command=self.restore_task)
-        self.completed_context_menu.add_command(label="🗑 删除冒险", command=self.delete_completed)
+        self.completed_context_menu.add_command(label=self.T['ctx_restore'], command=self.restore_task)
+        self.completed_context_menu.add_command(label=self.T['ctx_del_completed'], command=self.delete_completed)
         self.completed_context_menu.add_command(label=self.T['btn_export'], command=self.export_completed)
         self.completed_context_menu.add_command(label=self.T['btn_clear'], command=self.delete_all_completed)
     
@@ -1749,7 +1815,7 @@ class TodoApp:
         exp_card = tk.Frame(growth_frame, bg=THEME['colors']['title_bar'])
         exp_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        tk.Label(exp_card, text="🏆 本周黄金之路", font=("Microsoft YaHei", 13, "bold"),
+        tk.Label(exp_card, text=self.T['exp_card_title'], font=("Microsoft YaHei", 13, "bold"),
                  bg=THEME['colors']['title_bar'], fg=THEME['colors']['status_bar']).pack(anchor=tk.W)
         
         self.exp_rank_label = tk.Label(
@@ -1760,7 +1826,7 @@ class TodoApp:
         
         # 本周进度（剩余天数）
         self.exp_daily_label = tk.Label(
-            exp_card, text="📅 本周第1天，剩余6天", font=("Microsoft YaHei", 12, "bold"),
+            exp_card, text=self.T['exp_daily'].format(1, 6), font=("Microsoft YaHei", 12, "bold"),
             bg=THEME['colors']['title_bar'], fg="#2ECC71"
         )
         self.exp_daily_label.pack(pady=(0, 4))
@@ -1863,7 +1929,7 @@ class TodoApp:
         self.stat_category_tree.pack(fill=tk.BOTH, expand=True)
         
         # ── 3. By Date ──
-        date_frame = tk.LabelFrame(container, text="📅 按日期统计（已通关）",
+        date_frame = tk.LabelFrame(container, text=self.T['date_stat_title'],
                                    font=self.font_label, padx=8, pady=8)
         date_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
@@ -1877,7 +1943,7 @@ class TodoApp:
         self.stat_date_filter.bind('<<ComboboxSelected>>',
                                    lambda e: self._refresh_stat_date())
 
-        d_cols = ('📅 日期', '🏁 通关数')
+        d_cols = (self.T['date_col'], self.T['done_count_col'])
         self.stat_date_tree = ttk.Treeview(date_frame, columns=d_cols,
                                            show='headings')
         for c in d_cols:
@@ -1947,12 +2013,12 @@ class TodoApp:
             # Show new task animation
             self.show_new_task_animation()
             
-            self.set_status(f"🎯 冒险已领取：{task_text}")
+            self.set_status(self.T['status_task_received'].format(task_text))
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
             print(error_detail)
-            messagebox.showerror("🎯 领取新冒险出错", f"错误详情:\n{str(e)}")
+            messagebox.showerror(self.T['err_new_task'], f"错误详情:\n{str(e)}")
     
     def _complete_task_by_id(self, task_id):
         """标记指定任务为完成：移动数据 + 更新游戏数据 + 播放动画。
@@ -1988,14 +2054,14 @@ class TodoApp:
         try:
             selection = self.pending_tree.selection()
             if not selection:
-                messagebox.showwarning("警告", "🎮 请选择要通关的冒险！")
+                messagebox.showwarning("警告", self.T['warn_select_complete'])
                 return
             
             task_id = int(selection[0])
             if self._complete_task_by_id(task_id):
                 self.save_data()
                 self.refresh_display()
-                self.set_status("🏁 冒险已通关！")
+                self.set_status(self.T['status_task_done'])
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -2037,7 +2103,7 @@ class TodoApp:
                     if self._complete_task_by_id(task_id):
                         self.save_data()
                         self.refresh_display()
-                        self.set_status("🏁 冒险已通关！")
+                        self.set_status(self.T['status_task_done'])
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -2047,7 +2113,7 @@ class TodoApp:
         """Delete a pending task with confirmation"""
         selection = self.pending_tree.selection()
         if not selection:
-            messagebox.showwarning("警告", "🗑️ 请选择要放弃的冒险！")
+            messagebox.showwarning("警告", self.T['warn_select_abandon'])
             return
         
         task_id = int(selection[0])
@@ -2058,19 +2124,19 @@ class TodoApp:
                 task_text = t.get("text", "")
                 break
         
-        if not messagebox.askyesno("确认放弃", f"🗑️ 确定要放弃这个冒险吗？\n\n冒险: {task_text}"):
+        if not messagebox.askyesno("确认放弃", self.T['confirm_abandon'].format(task_text)):
             return
         
         self.data["tasks"] = [t for t in self.data["tasks"] if t["id"] != task_id]
         self.save_data()
         self.refresh_display()
-        self.set_status("🗑️ 冒险已放弃！")
+        self.set_status(self.T['status_abandoned'])
     
     def edit_task(self):
         """Edit selected pending task's content, category, priority, or person"""
         selection = self.pending_tree.selection()
         if not selection:
-            messagebox.showwarning("警告", "🎮 请选择要编辑的冒险！")
+            messagebox.showwarning("警告", self.T['warn_select_edit'])
             return
         
         task_id = int(selection[0])
@@ -2081,7 +2147,7 @@ class TodoApp:
                 break
         
         if not task:
-            messagebox.showerror("错误", "🎮 未找到该冒险！")
+            messagebox.showerror("错误", self.T['err_not_found_edit'])
             return
         
         # ── Build edit dialog ──
@@ -2182,7 +2248,7 @@ class TodoApp:
             
             self.save_data()
             self.refresh_display()
-            self.set_status(f"✏️ 冒险已更新: {new_text}")
+            self.set_status(self.T['status_task_updated'].format(new_text))
             dialog.destroy()
         
         tk.Button(btn_frame, text="✚ 保存修改", command=save_edit,
@@ -2199,7 +2265,7 @@ class TodoApp:
         try:
             selection = self.completed_tree.selection()
             if not selection:
-                messagebox.showwarning("警告", "🔄 请选择要恢复的冒险！")
+                messagebox.showwarning("警告", self.T['warn_select_restore'])
                 return
             
             task_id = int(selection[0])
@@ -2239,7 +2305,7 @@ class TodoApp:
             self.game_data["stats"]["total_completed"] = max(
                 0, self.game_data["stats"]["total_completed"] - 1)
             self.save_game_data()
-            self.set_status(f"🔄 冒险已恢复：{task_to_restore.get('text', '')}（扣回 {restore_wisdom} 智慧）")
+            self.set_status(self.T['status_task_restored'].format(task_to_restore.get('text', ''), restore_wisdom))
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -2266,8 +2332,7 @@ class TodoApp:
         
         is_this_week = self.is_task_this_week(task_completed, self.game_data.get("week_start_date", ""))
         if not messagebox.askyesno("确认删除",
-            f"🗑️ 确定要删除该已通关记录吗？\n\n冒险: {task_text}\n\n"
-            f"⚠️ 此操作将扣回 {task_wisdom} 智慧（历史总智慧同步减少），本周等级可能下降"):
+            self.T['confirm_del_done'].format(task_text, task_wisdom)):
             return
         
         self.data["completed"] = [t for t in self.data["completed"] if t["id"] != task_id]
@@ -2503,7 +2568,7 @@ class TodoApp:
         """Show dialog to add a new subtask directly."""
         # Create dialog
         dialog = tk.Toplevel(self.root)
-        dialog.title("🎯 接取新冒险")  # 原"➕ 添加支线任务"
+        dialog.title(self.T['dlg_title_add'])  # 原"➕ 添加支线任务"
         dialog.geometry("400x210")
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -2772,7 +2837,7 @@ class TodoApp:
         """Show dialog to add a new task with all fields."""
         # ── Build add task dialog ──
         dialog = tk.Toplevel(self.root)
-        dialog.title("🎯 领取新冒险")
+        dialog.title(self.T['dlg_title_receive'])
         dialog.geometry("520x450")  # Increased height to show all fields
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -2869,10 +2934,10 @@ class TodoApp:
             self.data["tasks"].append(task)
             self.save_data()
             self.refresh_display()
-            self.set_status(f"🎯 冒险已领取：{task_text}")
+            self.set_status(self.T['status_task_received'].format(task_text))
             dialog.destroy()
         
-        tk.Button(btn_frame, text="✅ 领取冒险", command=save_new_task,
+        tk.Button(btn_frame, text=self.T['btn_save_new'], command=save_new_task,
                   bg=THEME['colors']['primary'], fg="white", font=self.font_button,
                   cursor="hand2", padx=20, pady=4).pack(side=tk.RIGHT, padx=(10, 0))
         

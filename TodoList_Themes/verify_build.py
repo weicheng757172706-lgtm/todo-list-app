@@ -35,6 +35,12 @@ def verify(theme_dir):
         f"内嵌图标文件名 {icon}": icon.encode("utf-8") in blob,
         "ico 签名 (00 00 01 00)": b"\x00\x00\x01\x00" in blob,
     }
+    title_icon = cfg.get("title_icon")
+    if title_icon:
+        checks[f"内嵌标题栏图标 {title_icon}"] = title_icon.encode("utf-8") in blob
+        checks["PNG 签名 (89 50 4E 47)"] = b"\x89PNG" in blob
+    else:
+        print("  [SKIP] 该套未配置 title_icon（双剑套保持纯文字）")
     ok = True
     for k, v in checks.items():
         print(f"  [{'OK' if v else 'FAIL'}] {k}")
