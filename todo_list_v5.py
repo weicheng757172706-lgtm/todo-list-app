@@ -158,6 +158,7 @@ DEFAULT_THEME = {
         "status_ready": "准备开始新的冒险！",
         "status_ready_icon": "⚔️ 准备开始新的冒险！",
         "ctx_new_task": "🎯 领取新冒险",
+        "ctx_add_subtask": "🎯 接取支线任务",
         "warn_select_sub": "请选择要接取支线的冒险！",
         "err_not_found": "未找到该冒险！",
         "warn_select_sub_manage": "请选择要管理支线任务的冒险！",
@@ -1440,7 +1441,7 @@ class TodoApp:
                     self.pending_tree.selection_set(item)
                     context_menu.add_command(label=self.T['btn_abandon'], command=self.delete_task)
                     context_menu.add_command(label=self.T['btn_edit'], command=self.edit_task)
-                    context_menu.add_command(label="🎯 接取支线任务", command=self.context_add_subtask)
+                    context_menu.add_command(label=self.T['ctx_add_subtask'], command=self.context_add_subtask)
                     context_menu.add_separator()
                     context_menu.add_command(label=self.T['btn_refresh'], command=self.reload_data)
             else:
