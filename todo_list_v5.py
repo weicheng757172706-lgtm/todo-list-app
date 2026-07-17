@@ -1915,7 +1915,7 @@ class TodoApp:
         pri_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
         p_cols = (self.T['col_priority'], self.T['stat_ongoing'], self.T['stat_done'], self.T['stat_total'])
-        pri_widths = {self.T['col_priority']: 100, self.T['stat_ongoing']: 95,
+        pri_widths = {self.T['col_priority']: 105, self.T['stat_ongoing']: 95,
                        self.T['stat_done']: 95, self.T['stat_total']: 85}
         self.stat_priority_tree = ttk.Treeview(pri_frame, columns=p_cols,
                                                show='headings', height=5)

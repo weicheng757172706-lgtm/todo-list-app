@@ -4,7 +4,7 @@
   "icon": "TodoList_清单打勾.ico",
   "title_icon": "title_清单.png",
   "port": 54322,
-  "version": "V1.9.8",
+  "version": "V1.9.9",
   "text": {
     "col_desc": "📝 任务内容",
     "col_type": "📋 任务类型",
