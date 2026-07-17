@@ -29,8 +29,8 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 # 即可生成不同皮肤、独立运行的 exe。emoji 本期统一灰版，预留 theme.emoji。
 # ══════════════════════════════════════════════════════════════
 DEFAULT_THEME = {
-    "name": "冒险双剑",
-    "title": "冒险者的游戏",
+    "name": "冒险游戏",
+    "title": "冒险者の游戏",
     "icon": "TodoList_icon.ico",
     "port": 54321,
     "colors": {
