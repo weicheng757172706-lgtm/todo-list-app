@@ -1,8 +1,8 @@
 {
-  "name": "清单打勾",
-  "title": "工作任务管理器",
-  "icon": "TodoList_清单打勾.ico",
-  "title_icon": "title_清单.png",
+  "name": "待办清单",
+  "title": "待办清单",
+  "icon": "TodoList_待办清单.ico",
+  "title_icon": "title_待办清单.png",
   "port": 54322,
   "version": "V2.0.9",
   "colors": {
