@@ -839,7 +839,7 @@ class TodoApp:
             pass
         win.attributes('-alpha', 0.0)
 
-        W, H = 380, 300
+        W, H = 480, 380
         self.root.update_idletasks()
         rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
         rw, rh = self.root.winfo_width(), self.root.winfo_height()
@@ -869,7 +869,7 @@ class TodoApp:
                               'size': size, 'life': 70})
 
         # 卡片：阴影 + 圆角白卡（画在礼花之上，盖住中心）
-        cx, cy, cw, ch = 10, 8, 360, 284
+        cx, cy, cw, ch = 60, 70, 360, 240
         self._round_rect(canvas, cx, cy + 6, cw, ch, 18, fill='#d9dee4', outline='#d9dee4')
         self._round_rect(canvas, cx, cy, cw, ch, 18, fill='#ffffff', outline='#e6ebf0')
 
@@ -880,14 +880,14 @@ class TodoApp:
         chip_fg = self.T.get('chip_fg', '#2C3E50')
         chip_bg = self.T.get('chip_bg', '#F1C40F')
 
-        tk.Label(win, text=emoji, font=('Microsoft YaHei', 56), bg='#ffffff').place(relx=0.5, y=cy + 40, anchor='center')
-        tk.Label(win, text=title, font=('Microsoft YaHei', 20, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 112, anchor='center')
-        tk.Label(win, text=sub, font=('Microsoft YaHei', 13), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 148, anchor='center')
+        tk.Label(win, text=emoji, font=('Microsoft YaHei', 46), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
+        tk.Label(win, text=title, font=('Microsoft YaHei', 17, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 96, anchor='center')
+        tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 140, anchor='center')
 
         # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
-        chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 14, 'bold'),
+        chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 13, 'bold'),
                               fg=chip_fg, bg=TRANS, padx=18, pady=7)
-        chip_label.place(relx=0.5, y=cy + 240, anchor='center')
+        chip_label.place(relx=0.5, y=cy + 206, anchor='center')
         win.update_idletasks()
         bx = chip_label.winfo_rootx() - win.winfo_rootx()
         by = chip_label.winfo_rooty() - win.winfo_rooty()
@@ -962,7 +962,7 @@ class TodoApp:
     def _celebrate_ring(self, canvas, cx, cy, step, accent):
         if step > 18:
             return
-        r = 20 + step * 3
+        r = 18 + step * 2
         try:
             canvas.delete('cring')
             canvas.create_oval(cx - r, cy - r, cx + r, cy + r,

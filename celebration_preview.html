@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>庆祝窗口预览 · 480×380 / 卡片 360×240</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #888;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px; color: #333;
+  }
+  .hint { font-size: 13px; color: #eee; margin-bottom: 12px; text-align: center; line-height: 1.6; }
+  .stage {
+    width: 640px; height: 480px; background: #ecf0f1; position: relative;
+    border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  /* 模拟主程序窗口（庆祝窗透明边缘会透出此背景） */
+  .app-head {
+    height: 46px; background: #2C3E50; color: #fff; display: flex;
+    align-items: center; padding: 0 16px; font-size: 16px; font-weight: bold;
+  }
+  .app-body { padding: 14px 16px; }
+  .row { height: 30px; background: #fff; border-radius: 6px; margin-bottom: 8px;
+         box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .row.done { opacity: .45; text-decoration: line-through; }
+
+  /* 庆祝窗 overlay：480×380，居中盖在主窗口上 */
+  .overlay {
+    position: absolute; left: 80px; top: 50px;
+    width: 480px; height: 380px;
+  }
+  /* 礼花粒子（装饰） */
+  .confetti { position: absolute; border-radius: 50%; opacity: .85; }
+  /* 卡片 */
+  .card {
+    position: absolute; left: 60px; top: 70px; width: 360px; height: 240px;
+    border-radius: 18px;
+  }
+  .card-shadow {
+    left: 60px; top: 76px; background: #d9dee4;
+  }
+  .card-face { background: #ffffff; border: 1px solid #e6ebf0; }
+  /* 光环 */
+  .ring {
+    position: absolute; left: 186px; top: 136px; width: 108px; height: 108px;
+    border-radius: 50%; border: 3px solid #F1C40F;
+  }
+  .emoji { position: absolute; left: 0; right: 0; top: 116px; text-align: center;
+           font-size: 46px; transform: translateY(-50%); }
+  .title { position: absolute; left: 0; right: 0; top: 166px; text-align: center;
+           font-size: 17px; font-weight: bold; color: #2C3E50; transform: translateY(-50%); }
+  .sub { position: absolute; left: 0; right: 0; top: 210px; text-align: center;
+         font-size: 12px; color: #8a97a0; transform: translateY(-50%); }
+  .chip {
+    position: absolute; left: 50%; top: 276px; transform: translate(-50%, -50%);
+    background: #F1C40F; color: #2C3E50; font-size: 13px; font-weight: bold;
+    padding: 7px 18px; border-radius: 10px; white-space: nowrap;
+  }
+  .legend { margin-top: 14px; font-size: 12px; color: #eee; line-height: 1.7; }
+  .legend b { color: #F1C40F; }
+</style>
+</head>
+<body>
+  <div class="hint">庆祝窗口原型预览（高保真）— 窗口 480×380，圆角白卡 360×240，居中<br>
+  emoji 46 / 标题 17 / 副文案 12 / 药丸 13；副文案↔药丸间距 <b>66px</b>；光环终值 54</div>
+
+  <div class="stage">
+    <div class="app-head">待办清单</div>
+    <div class="app-body">
+      <div class="row done"></div>
+      <div class="row done"></div>
+      <div class="row"></div>
+      <div class="row"></div>
+      <div class="row"></div>
+    </div>
+
+    <div class="overlay">
+      <!-- 礼花装饰 -->
+      <div class="confetti" style="left:120px;top:60px;width:8px;height:8px;background:#F1C40F;"></div>
+      <div class="confetti" style="left:360px;top:40px;width:7px;height:7px;background:#2C3E50;"></div>
+      <div class="confetti" style="left:410px;top:150px;width:9px;height:9px;background:#5B8FF9;"></div>
+      <div class="confetti" style="left:70px;top:170px;width:6px;height:6px;background:#E67E22;"></div>
+      <div class="confetti" style="left:300px;top:330px;width:8px;height:8px;background:#2ECC71;"></div>
+      <div class="confetti" style="left:150px;top:340px;width:7px;height:7px;background:#F1C40F;"></div>
+      <div class="confetti" style="left:420px;top:300px;width:6px;height:6px;background:#2C3E50;"></div>
+
+      <div class="card card-shadow"></div>
+      <div class="card card-face"></div>
+      <div class="ring"></div>
+      <div class="emoji">🎉</div>
+      <div class="title">恭喜您，冒险已完成！</div>
+      <div class="sub">本次冒险已记入战绩</div>
+      <div class="chip">+10 经验值</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    图例：窗口 <b>480×380</b>｜卡片 <b>360×240</b>（边距 60/70 居中）｜emoji <b>46px</b>｜标题 <b>17px</b>｜副文案 <b>12px</b>｜药丸 <b>13px</b>｜<br>
+    副文案(y210) ↔ 药丸(y276) = <b>66px</b>｜光环半径终值 <b>54</b>（中心=卡片中心 240,190）
+  </div>
+</body>
+</html>
