@@ -898,7 +898,7 @@ class TodoApp:
 
         # 入场淡入 + 光环 + 礼花动画
         self._celebrate_fade(win, 1.0, 1)
-        self._celebrate_ring(canvas, ccx, ccy, 0, accent)
+        self._celebrate_ring(canvas, ccx, cy + 52, 0, accent)
         self._celebrate_confetti(canvas, particles, 0)
 
         # 约 2.4s 后淡出销毁
@@ -963,7 +963,7 @@ class TodoApp:
     def _celebrate_ring(self, canvas, cx, cy, step, accent):
         if step > 18:
             return
-        r = 18 + step * 2
+        r = 10 + step * 1.6
         try:
             canvas.delete('cring')
             canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
