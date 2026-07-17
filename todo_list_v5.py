@@ -72,7 +72,6 @@ DEFAULT_THEME = {
         "gold_alt": "#FFD700",
         "success_alt": "#00AA00",
         "title_color": "#2C3E50",
-        "celebrate_accent": "#F1C40F",
         "hint": "#888888",
         "purple": "#9B59B6",
         "dark_bg": "#2B2B2B",
@@ -165,6 +164,7 @@ DEFAULT_THEME = {
         "complete_title": "恭喜您，冒险已完成！",
         "complete_sub": "本次冒险已记入战绩",
         "complete_chip": "+10 经验值",
+        "celebrate_accent": "#F1C40F",
         "wisdom_anim": "🧠 智慧 +{} 🧠",
         # ── 状态栏 / 对话框 / 右键菜单 / 提示（原硬编码，抽主题以便清单套去冒险味）──
         "msg_new_task_gen": "🎯 新冒险已生成！",

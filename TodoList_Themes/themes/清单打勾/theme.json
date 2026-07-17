@@ -4,9 +4,8 @@
   "icon": "TodoList_清单打勾.ico",
   "title_icon": "title_清单.png",
   "port": 54322,
-  "version": "V2.0.3",
+  "version": "V2.0.4",
   "colors": {
-    "celebrate_accent": "#4F81BD"
   },
   "text": {
     "col_desc": "📝 任务内容",
@@ -77,6 +76,7 @@
     "complete_title": "恭喜您，任务已完成！",
     "complete_sub": "本次任务已记入战绩",
     "complete_chip": "+10 经验值",
+    "celebrate_accent": "#4F81BD",
     "msg_new_task_gen": "🎯 新任务已生成！",
     "btn_add_task": "✚ 领取新任务",
     "status_ready": "准备开始新任务！",
