@@ -151,7 +151,7 @@ DEFAULT_THEME = {
         "complete_msg": "🎉 恭喜您冒险已完成！！！",
         "complete_emoji": "🎉",
         "complete_title": "恭喜您，冒险已完成！",
-        "complete_sub": "本次冒险已记入战绩",
+        "complete_sub": "",
         "complete_chip": "+10 经验值",
         "celebrate_accent": "#F1C40F",
         "chip_bg": "#F1C40F",
@@ -875,19 +875,20 @@ class TodoApp:
 
         emoji = self.T.get('complete_emoji', '🎉')
         title = self.T.get('complete_title', '恭喜您，冒险已完成！')
-        sub = self.T.get('complete_sub', '本次冒险已记入战绩')
+        sub = self.T.get('complete_sub', '') or ''
         chip = self.T.get('complete_chip', '+10 经验值')
         chip_fg = self.T.get('chip_fg', '#2C3E50')
         chip_bg = self.T.get('chip_bg', '#F1C40F')
 
         tk.Label(win, text=emoji, font=('Microsoft YaHei', 46), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
         tk.Label(win, text=title, font=('Microsoft YaHei', 17, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 96, anchor='center')
-        tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 140, anchor='center')
+        if sub:
+            tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 140, anchor='center')
 
         # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
         chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 13, 'bold'),
                               fg=chip_fg, bg=TRANS, padx=18, pady=7)
-        chip_label.place(relx=0.5, y=cy + 206, anchor='center')
+        chip_label.place(relx=0.5, y=cy + 140, anchor='center')
         win.update_idletasks()
         bx = chip_label.winfo_rootx() - win.winfo_rootx()
         by = chip_label.winfo_rooty() - win.winfo_rooty()

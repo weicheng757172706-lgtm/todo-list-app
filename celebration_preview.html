@@ -54,7 +54,7 @@
   .sub { position: absolute; left: 0; right: 0; top: 210px; text-align: center;
          font-size: 12px; color: #8a97a0; transform: translateY(-50%); }
   .chip {
-    position: absolute; left: 50%; top: 276px; transform: translate(-50%, -50%);
+    position: absolute; left: 50%; top: 210px; transform: translate(-50%, -50%);
     background: #F1C40F; color: #2C3E50; font-size: 13px; font-weight: bold;
     padding: 7px 18px; border-radius: 10px; white-space: nowrap;
   }
@@ -64,7 +64,7 @@
 </head>
 <body>
   <div class="hint">庆祝窗口原型预览（高保真）— 窗口 480×380，圆角白卡 360×240，居中<br>
-  emoji 46 / 标题 17 / 副文案 12 / 药丸 13；副文案↔药丸间距 <b>66px</b>；光环终值 54</div>
+  emoji 46 / 标题 17 / 药丸 13；已去掉副文案，药丸上移填补（y210）；光环终值 54</div>
 
   <div class="stage">
     <div class="app-head">待办清单</div>
@@ -91,14 +91,13 @@
       <div class="ring"></div>
       <div class="emoji">🎉</div>
       <div class="title">恭喜您，冒险已完成！</div>
-      <div class="sub">本次冒险已记入战绩</div>
       <div class="chip">+10 经验值</div>
     </div>
   </div>
 
   <div class="legend">
-    图例：窗口 <b>480×380</b>｜卡片 <b>360×240</b>（边距 60/70 居中）｜emoji <b>46px</b>｜标题 <b>17px</b>｜副文案 <b>12px</b>｜药丸 <b>13px</b>｜<br>
-    副文案(y210) ↔ 药丸(y276) = <b>66px</b>｜光环半径终值 <b>54</b>（中心=卡片中心 240,190）
+    图例：窗口 <b>480×380</b>｜卡片 <b>360×240</b>（边距 60/70 居中）｜emoji <b>46px</b>｜标题 <b>17px</b>｜药丸 <b>13px</b>｜<br>
+    已去掉副文案，药丸上移填补(y210，标题 y166 下方)｜光环半径终值 <b>54</b>（中心=卡片中心 240,190）
   </div>
 </body>
 </html>

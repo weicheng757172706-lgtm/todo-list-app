@@ -64,7 +64,7 @@
     "complete_msg": "🎉 恭喜您任务已完成！！！",
     "complete_emoji": "🏆",
     "complete_title": "恭喜您，任务已完成！",
-    "complete_sub": "本次任务已记入战绩",
+    "complete_sub": "",
     "complete_chip": "+10 经验值",
     "celebrate_accent": "#4F81BD",
     "msg_new_task_gen": "🎯 新任务已生成！",
