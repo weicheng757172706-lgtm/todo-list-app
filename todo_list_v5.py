@@ -87,6 +87,9 @@ DEFAULT_THEME = {
         "col_priority": "⚡ 紧急等级",
         "col_owner": "⚔️ 冒险者",
         "col_tag": "🏷️ 标签",
+        "form_tag": "🏷️ 标签:",
+        "dlg_tag": self.T['dlg_tag'],
+        "dlg_tag2": self.T['dlg_tag2'],
         "col_progress": "📊 进度",
         "col_receive": "⏰ 领取时间",
         "col_complete_time": "🏁 通关时间",
@@ -1181,7 +1184,7 @@ class TodoApp:
         # -- Tags group --
         g4 = tk.Frame(row1)
         g4.pack(side=tk.LEFT)
-        tk.Label(g4, text="🏷️ 标签:", font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(g4, text=self.T['form_tag'], font=self.font_label).pack(side=tk.LEFT, padx=(0, 6))
         self.tags_entry = tk.Entry(g4, width=15, font=self.font_entry)
         self.tags_entry.pack(side=tk.LEFT)
         tk.Label(g4, text="(逗号分隔)", font=("Microsoft YaHei", 10), fg="#888888").pack(side=tk.LEFT, padx=(4, 0))
@@ -1616,7 +1619,7 @@ class TodoApp:
             entry.select_range(0, tk.END)
             
             # 标签
-            tk.Label(dialog, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, padx=20, pady=(0, 4))
+            tk.Label(dialog, text=self.T['dlg_tag'], font=self.font_label).pack(anchor=tk.W, padx=20, pady=(0, 4))
             tags_var = tk.StringVar(value=", ".join(subtask.get("tags", [])))
             tags_entry = tk.Entry(dialog, font=self.font_entry, textvariable=tags_var, width=40)
             tags_entry.pack(padx=20, pady=(0, 20))
@@ -2206,7 +2209,7 @@ class TodoApp:
         person_entry.pack(fill=tk.X, pady=(0, 14))
         
         # --- 🏷️ 标签 ---
-        tk.Label(main_frame, text="🏷️ 标签: (逗号分隔)", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['dlg_tag2'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         tags_var = tk.StringVar(value=", ".join(task.get("tags", [])))
         tags_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=tags_var)
         tags_entry.pack(fill=tk.X, pady=(0, 18))
@@ -2593,7 +2596,7 @@ class TodoApp:
         entry.pack(fill=tk.X, pady=(0, 12))
         
         # 标签（逗号分隔）
-        tk.Label(f, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(f, text=self.T['dlg_tag'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         tags_var = tk.StringVar()
         tags_entry = tk.Entry(f, font=self.font_entry, textvariable=tags_var)
         tags_entry.pack(fill=tk.X, pady=(0, 12))
@@ -2722,7 +2725,7 @@ class TodoApp:
             entry.pack(fill=tk.X, pady=(0, 12))
             
             # 标签（逗号分隔）
-            tk.Label(f, text="🏷️ 标签 (逗号分隔):", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+            tk.Label(f, text=self.T['dlg_tag'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
             tags_var = tk.StringVar()
             tags_entry = tk.Entry(f, font=self.font_entry, textvariable=tags_var)
             tags_entry.pack(fill=tk.X, pady=(0, 12))
@@ -2891,7 +2894,7 @@ class TodoApp:
         person_entry.pack(fill=tk.X, pady=(0, 14))
         
         # --- 🏷️ 标签 ---
-        tk.Label(main_frame, text="🏷️ 标签: (逗号分隔)", font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(main_frame, text=self.T['dlg_tag2'], font=self.font_label).pack(anchor=tk.W, pady=(0, 4))
         tags_var = tk.StringVar()
         tags_entry = tk.Entry(main_frame, font=self.font_entry, textvariable=tags_var)
         tags_entry.pack(fill=tk.X, pady=(0, 18))
