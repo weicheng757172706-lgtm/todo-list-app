@@ -44,17 +44,17 @@
   .card-face { background: #ffffff; border: 1px solid #e6ebf0; }
   /* 光环 */
   .ring {
-    position: absolute; left: 201px; top: 83px; width: 78px; height: 78px;
+    position: absolute; left: 178px; top: 118px; width: 124px; height: 124px;
     border-radius: 50%; border: 3px solid #F1C40F;
   }
-  .emoji { position: absolute; left: 0; right: 0; top: 116px; text-align: center;
+  .emoji { position: absolute; left: 0; right: 0; top: 160px; text-align: center;
            font-size: 46px; transform: translateY(-50%); }
-  .title { position: absolute; left: 0; right: 0; top: 166px; text-align: center;
+  .title { position: absolute; left: 0; right: 0; top: 200px; text-align: center;
            font-size: 17px; font-weight: bold; color: #2C3E50; transform: translateY(-50%); }
   .sub { position: absolute; left: 0; right: 0; top: 210px; text-align: center;
          font-size: 12px; color: #8a97a0; transform: translateY(-50%); }
   .chip {
-    position: absolute; left: 50%; top: 210px; transform: translate(-50%, -50%);
+    position: absolute; left: 50%; top: 262px; transform: translate(-50%, -50%);
     background: #F1C40F; color: #2C3E50; font-size: 13px; font-weight: bold;
     padding: 7px 18px; border-radius: 10px; white-space: nowrap;
   }
@@ -64,7 +64,7 @@
 </head>
 <body>
   <div class="hint">庆祝窗口原型预览（高保真）— 窗口 480×380，圆角白卡 360×240，居中<br>
-  emoji 46 / 标题 17 / 药丸 13；已去掉副文案，药丸上移填补（y210）；光环环绕奖杯(圆心cy+52)·终值39</div>
+  重新布局：光环放大环绕「奖杯+标题」两者(圆心cy+110·终值62)，药丸下移与标题拉开62px距离</div>
 
   <div class="stage">
     <div class="app-head">待办清单</div>
@@ -89,7 +89,7 @@
       <div class="card card-shadow"></div>
       <div class="card card-face"></div>
       <div class="ring"></div>
-      <div class="emoji">🎉</div>
+      <div class="emoji">🏆</div>
       <div class="title">恭喜您，冒险已完成！</div>
       <div class="chip">+10 经验值</div>
     </div>
@@ -97,7 +97,7 @@
 
   <div class="legend">
     图例：窗口 <b>480×380</b>｜卡片 <b>360×240</b>（边距 60/70 居中）｜emoji <b>46px</b>｜标题 <b>17px</b>｜药丸 <b>13px</b>｜<br>
-    已去掉副文案，药丸上移填补(y210，标题 y166 下方)｜光环环绕奖杯·圆心(240,122)·半径终值 <b>39</b>（不与药丸重叠）
+    重新布局：光环放大环绕奖杯+标题(圆心240,180·终值62)，emoji(y160)与标题(y200)同在环内，药丸(y262)下移与标题拉开62px、不贴脸
   </div>
 </body>
 </html>

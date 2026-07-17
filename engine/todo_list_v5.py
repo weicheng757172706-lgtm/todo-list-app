@@ -144,12 +144,12 @@ DEFAULT_THEME = {
         "date_stat_title": "📅 按日期统计（已通关）",
         "date_col": "📅 日期",
         "done_count_col": "🏁 通关数",
-        "levelup_title": "🎉 等级提升！",
+        "levelup_title": "🏆 等级提升！",
         "levelup_msg": "等级提升！",
-        "levelup_icon": "🎉",
+        "levelup_icon": "🏆",
         "levelup_btn": "继续冒险！",
-        "complete_msg": "🎉 恭喜您冒险已完成！！！",
-        "complete_emoji": "🎉",
+        "complete_msg": "🏆 恭喜您冒险已完成！！！",
+        "complete_emoji": "🏆",
         "complete_title": "恭喜您，冒险已完成！",
         "complete_sub": "",
         "complete_chip": "+10 经验值",
@@ -873,22 +873,26 @@ class TodoApp:
         self._round_rect(canvas, cx, cy + 6, cw, ch, 18, fill='#d9dee4', outline='#d9dee4')
         self._round_rect(canvas, cx, cy, cw, ch, 18, fill='#ffffff', outline='#e6ebf0')
 
-        emoji = self.T.get('complete_emoji', '🎉')
+        emoji = self.T.get('complete_emoji', '🏆')
         title = self.T.get('complete_title', '恭喜您，冒险已完成！')
         sub = self.T.get('complete_sub', '') or ''
         chip = self.T.get('complete_chip', '+10 经验值')
         chip_fg = self.T.get('chip_fg', '#2C3E50')
         chip_bg = self.T.get('chip_bg', '#F1C40F')
 
-        tk.Label(win, text=emoji, font=('Microsoft YaHei', 46), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
-        tk.Label(win, text=title, font=('Microsoft YaHei', 17, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 96, anchor='center')
+        # emoji 与标题改为 canvas 文字（透明背景），避免白底 Label 遮挡光环
+        canvas.create_text(W // 2, cy + 90, text=emoji, font=('Microsoft YaHei', 46),
+                           fill=navy, anchor='center', tags='ctext')
+        canvas.create_text(W // 2, cy + 130, text=title, font=('Microsoft YaHei', 17, 'bold'),
+                           fill=navy, anchor='center', tags='ctext')
         if sub:
-            tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 140, anchor='center')
+            canvas.create_text(W // 2, cy + 170, text=sub, font=('Microsoft YaHei', 12),
+                               fill='#8a97a0', anchor='center', tags='ctext')
 
         # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
         chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 13, 'bold'),
                               fg=chip_fg, bg=TRANS, padx=18, pady=7)
-        chip_label.place(relx=0.5, y=cy + 140, anchor='center')
+        chip_label.place(relx=0.5, y=cy + 192, anchor='center')
         win.update_idletasks()
         bx = chip_label.winfo_rootx() - win.winfo_rootx()
         by = chip_label.winfo_rooty() - win.winfo_rooty()
@@ -898,7 +902,7 @@ class TodoApp:
 
         # 入场淡入 + 光环 + 礼花动画
         self._celebrate_fade(win, 1.0, 1)
-        self._celebrate_ring(canvas, ccx, cy + 52, 0, accent)
+        self._celebrate_ring(canvas, ccx, cy + 110, 0, accent)
         self._celebrate_confetti(canvas, particles, 0)
 
         # 约 2.4s 后淡出销毁
@@ -963,11 +967,13 @@ class TodoApp:
     def _celebrate_ring(self, canvas, cx, cy, step, accent):
         if step > 18:
             return
-        r = 10 + step * 1.6
+        r = 8 + step * 3.0
         try:
             canvas.delete('cring')
             canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
                                outline=accent, width=3, tags='cring')
+            # 光环衬于文字之后（文字始终在最上层，成环不被遮挡）
+            canvas.tag_lower('cring', 'ctext')
         except Exception:
             pass
         canvas.after(25, lambda: self._celebrate_ring(canvas, cx, cy, step + 1, accent))
