@@ -152,6 +152,7 @@ DEFAULT_THEME = {
         "ach_hundred_title": "👑 传奇冒险家",
         "ach_hundred_sub": "完成100个冒险",
         "levelup_title": "🎉 等级提升！",
+        "levelup_msg": "等级提升！",
         "levelup_icon": "🎉",
         "levelup_btn": "继续冒险！",
         "achievement_title": "🏆 成就解锁！",
@@ -788,22 +789,22 @@ class TodoApp:
         """Show level up animation (V1.6.0：每周智慧系统)."""
         level_up_window = tk.Toplevel(self.root)
         level_up_window.title(self.T['levelup_title'])
-        level_up_window.geometry("320x220")
+        level_up_window.geometry("380x300")
         level_up_window.transient(self.root)
         level_up_window.grab_set()
-        
+
         # Center the window
         level_up_window.update_idletasks()
-        x = (level_up_window.winfo_screenwidth() // 2) - (320 // 2)
-        y = (level_up_window.winfo_screenheight() // 2) - (220 // 2)
-        level_up_window.geometry(f"320x220+{x}+{y}")
+        x = (level_up_window.winfo_screenwidth() // 2) - (380 // 2)
+        y = (level_up_window.winfo_screenheight() // 2) - (300 // 2)
+        level_up_window.geometry(f"380x300+{x}+{y}")
         
         level = self.game_data.get('weekly_level', 1)
         title = self.get_wisdom_title(level)
         wisdom = self.game_data.get('weekly_wisdom', 0)
         
         tk.Label(level_up_window, text=self.T['levelup_icon'], font=("Microsoft YaHei", 48)).pack(pady=15)
-        tk.Label(level_up_window, text=f"等级提升！", font=("Microsoft YaHei", 16, "bold")).pack()
+        tk.Label(level_up_window, text=self.T['levelup_msg'], font=("Microsoft YaHei", 16, "bold")).pack()
         tk.Label(level_up_window, text=f"{title} | Lv.{level}", font=("Microsoft YaHei", 14, "bold"), fg=THEME['colors']['accent']).pack(pady=8)
         tk.Label(level_up_window, text=f"本周智慧: {wisdom}", font=("Microsoft YaHei", 12)).pack()
         
