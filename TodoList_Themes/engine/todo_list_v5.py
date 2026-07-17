@@ -117,6 +117,10 @@ DEFAULT_THEME = {
         "stat_ongoing": "🚀 进行中",
         "stat_done": "🏁 已通关",
         "stat_total": "📊 合计",
+        # 任务大厅总览卡片（3 张）
+        "overview_pending": "🚀 进行中",
+        "overview_done": "🏁 已通关",
+        "overview_rate": "📊 通关率",
         # 排序下拉
         "sort_default": "默认顺序",
         "sort_priority": "按紧急程度",
@@ -1887,9 +1891,9 @@ class TodoApp:
         self.stat_rate = tk.StringVar(value="0%")
         
         card_data = [
-            ("🚀 进行中", self.stat_pending, "#F0AD4E"),
-            ("🏁 已通关", self.stat_completed, "#5CB85C"),
-            ("📊 通关率", self.stat_rate, THEME['colors']['primary']),
+            (self.T['overview_pending'], self.stat_pending, "#F0AD4E"),
+            (self.T['overview_done'], self.stat_completed, "#5CB85C"),
+            (self.T['overview_rate'], self.stat_rate, THEME['colors']['primary']),
         ]
         for i, (label, var, bg) in enumerate(card_data):
             card = tk.Frame(card_frame, bg=bg, padx=20, pady=8)

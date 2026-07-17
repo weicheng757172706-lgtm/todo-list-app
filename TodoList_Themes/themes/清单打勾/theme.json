@@ -4,7 +4,7 @@
   "icon": "TodoList_清单打勾.ico",
   "title_icon": "title_清单.png",
   "port": 54322,
-  "version": "V1.9.5",
+  "version": "V1.9.6",
   "text": {
     "col_desc": "📝 任务内容",
     "col_type": "📋 任务类型",
@@ -23,6 +23,9 @@
     "tab_stats": "📊 任务大厅",
     "stat_ongoing": "🔲 待完成任务",
     "stat_done": "✅ 已完成任务",
+    "overview_pending": "🔲 待完成",
+    "overview_done": "✅ 已完成",
+    "overview_rate": "📊 完成率",
     "btn_mark": "✅ 标记完成",
     "btn_abandon": "🗑 删除任务",
     "btn_edit": "✏️ 编辑任务",
