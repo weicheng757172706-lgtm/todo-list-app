@@ -6,7 +6,7 @@ TodoList 多套主题 · 一键批量打包器
 - engine/todo_list_v5.py   : 唯一源码真相源（已主题化，运行时读 theme.json）
 - themes/<套名>/theme.json : 该套主题配置（name/title/icon/port + 可选 colors 覆盖）
 - themes/<套名>/*.ico      : 该套应用图标
-- 打包后 exe 落在 themes/<套名>/TodoList_<套名>.exe（自包含 theme.json+icon）
+- 打包后 exe 落在 themes/<套名>/TodoList_<套名>_<版本号>.exe（文件名带版本号，便于区分新旧；版本号取自 theme.json 的 version 字段，缺省回退引擎 VERSION）
 - 各套数据文件 todo_data.json 落在各自 exe 同目录，天然独立
 
 用法（在 venv 中）：
@@ -15,6 +15,7 @@ TodoList 多套主题 · 一键批量打包器
 """
 import sys
 import os
+import re
 import json
 import shutil
 import subprocess
@@ -28,6 +29,20 @@ WORK_DIR = os.path.join(BUILD_ROOT, ".build")
 def find_pyinstaller():
     # 优先用当前解释器（应在含 PyInstaller 的 venv 中）
     return [sys.executable, "-m", "PyInstaller"]
+
+
+def engine_version():
+    """从 engine 源码解析 VERSION 常量，作为 theme 未声明 version 时的回退。"""
+    try:
+        with open(ENGINE, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("VERSION"):
+                    m = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', line)
+                    if m:
+                        return m.group(1)
+    except Exception:
+        pass
+    return "V0.0.0"
 
 
 def build_one(theme_dir):
@@ -44,7 +59,8 @@ def build_one(theme_dir):
         print(f"[错误] {theme_dir} 缺少图标文件 {icon}")
         return False
 
-    exe_name = f"TodoList_{name}"
+    version = cfg.get("version") or engine_version()
+    exe_name = f"TodoList_{name}_{version}"
     print(f"\n===== 打包 [{name}] =====")
     print(f"  icon : {icon_path}")
     print(f"  port : {cfg.get('port', '(默认)')}")

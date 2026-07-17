@@ -4,6 +4,7 @@
   "icon": "TodoList_清单打勾.ico",
   "title_icon": "title_清单.png",
   "port": 54322,
+  "version": "V1.9.3",
   "text": {
     "col_desc": "📝 任务内容",
     "col_type": "📋 任务类型",
@@ -90,12 +91,12 @@
     "btn_save_new": "✅ 领取任务"
   },
   "levels": [
-    {"name": "青铜", "min": 0, "max": 60},
-    {"name": "白银", "min": 61, "max": 200},
-    {"name": "铂金", "min": 201, "max": 300},
-    {"name": "钻石", "min": 301, "max": 400},
-    {"name": "大师", "min": 401, "max": 500},
-    {"name": "王者", "min": 501, "max": 999999}
+    {"name": "入门", "min": 0, "max": 60},
+    {"name": "进阶", "min": 61, "max": 200},
+    {"name": "熟练", "min": 201, "max": 300},
+    {"name": "精通", "min": 301, "max": 400},
+    {"name": "专家", "min": 401, "max": 500},
+    {"name": "大师", "min": 501, "max": 999999}
   ],
   "priority_options": ["重要紧急", "重要不紧急", "不重要紧急", "不重要不紧急"],
   "category_options": ["工作任务", "每日成长任务"],

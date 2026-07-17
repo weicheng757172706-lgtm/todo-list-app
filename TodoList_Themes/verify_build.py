@@ -8,11 +8,27 @@
     python verify_build.py
 """
 import os
+import re
 import sys
 import json
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 THEMES = os.path.join(ROOT, "themes")
+ENGINE = os.path.join(ROOT, "engine", "todo_list_v5.py")
+
+
+def engine_version():
+    """从 engine 源码解析 VERSION 常量，作为 theme 未声明 version 时的回退。"""
+    try:
+        with open(ENGINE, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("VERSION"):
+                    m = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', line)
+                    if m:
+                        return m.group(1)
+    except Exception:
+        pass
+    return "V0.0.0"
 
 
 def verify(theme_dir):
@@ -21,7 +37,8 @@ def verify(theme_dir):
         cfg = json.load(f)
     name = cfg.get("name") or os.path.basename(theme_dir)
     icon = cfg.get("icon", "TodoList_icon.ico")
-    exe = os.path.join(theme_dir, f"TodoList_{name}.exe")
+    version = cfg.get("version") or engine_version()
+    exe = os.path.join(theme_dir, f"TodoList_{name}_{version}.exe")
     print(f"\n--- [{name}] ---")
     if not os.path.exists(exe):
         print("[FAIL] exe 不存在:", exe)
