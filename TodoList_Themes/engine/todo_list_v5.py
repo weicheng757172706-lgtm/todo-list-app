@@ -1915,11 +1915,13 @@ class TodoApp:
         pri_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
         p_cols = (self.T['col_priority'], self.T['stat_ongoing'], self.T['stat_done'], self.T['stat_total'])
+        pri_widths = {self.T['col_priority']: 105, self.T['stat_ongoing']: 115,
+                       self.T['stat_done']: 115, self.T['stat_total']: 85}
         self.stat_priority_tree = ttk.Treeview(pri_frame, columns=p_cols,
                                                show='headings', height=5)
         for c in p_cols:
             self.stat_priority_tree.heading(c, text=c, anchor=tk.CENTER)
-            self.stat_priority_tree.column(c, width=95, minwidth=70, anchor=tk.CENTER)
+            self.stat_priority_tree.column(c, width=pri_widths.get(c, 95), minwidth=70, anchor=tk.CENTER)
         self.stat_priority_tree.pack(fill=tk.BOTH, expand=True)
         
         # -- Category table --
@@ -1930,7 +1932,8 @@ class TodoApp:
         c_cols = (self.T['col_type'], self.T['stat_ongoing'], self.T['stat_done'], self.T['stat_total'])
         self.stat_category_tree = ttk.Treeview(cat_frame, columns=c_cols,
                                                show='headings', height=5)
-        col_widths = {self.T['col_type']: 135, self.T['stat_ongoing']: 95, self.T['stat_done']: 95, self.T['stat_total']: 95}
+        col_widths = {self.T['col_type']: 135, self.T['stat_ongoing']: 115,
+                       self.T['stat_done']: 115, self.T['stat_total']: 85}
         for c in c_cols:
             self.stat_category_tree.heading(c, text=c, anchor=tk.CENTER)
             self.stat_category_tree.column(c, width=col_widths.get(c, 95), minwidth=80, anchor=tk.CENTER)
