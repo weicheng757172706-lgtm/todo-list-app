@@ -71,6 +71,8 @@ DEFAULT_THEME = {
         "danger_alt2": "#E74C3C",
         "gold_alt": "#FFD700",
         "success_alt": "#00AA00",
+        "title_color": "#2C3E50",
+        "celebrate_accent": "#F1C40F",
         "hint": "#888888",
         "purple": "#9B59B6",
         "dark_bg": "#2B2B2B",
@@ -159,6 +161,10 @@ DEFAULT_THEME = {
         "achievement_icon": "🏆",
         "achievement_btn": "太棒了！",
         "complete_msg": "🎉 恭喜您冒险已完成！！！",
+        "complete_emoji": "🎉",
+        "complete_title": "恭喜您，冒险已完成！",
+        "complete_sub": "本次冒险已记入战绩",
+        "complete_chip": "+10 经验值",
         "wisdom_anim": "🧠 智慧 +{} 🧠",
         # ── 状态栏 / 对话框 / 右键菜单 / 提示（原硬编码，抽主题以便清单套去冒险味）──
         "msg_new_task_gen": "🎯 新冒险已生成！",
@@ -873,138 +879,156 @@ class TodoApp:
         self.animation_after_id = self.root.after(30, lambda: self._animate_new_task(step + 1))
     
     def show_fireworks_animation(self):
-        """Show fireworks animation using Canvas particles (方案B：小Canvas在中央)."""
-        # 创建一个小的Canvas，显示在窗口中央，不遮挡界面
-        canvas_width = 300
-        canvas_height = 200
-        
-        canvas = tk.Canvas(self.root, 
-                           width=canvas_width, 
-                           height=canvas_height,
-                           highlightthickness=0,
-                           borderwidth=0)
-        
-        # 设置背景色为窗口的背景色（看起来像透明）
-        canvas.configure(bg=self.root.cget('bg'))
-        
-        # 显示在窗口中央
-        canvas.place(relx=0.5, rely=0.5, 
-                     anchor=tk.CENTER,
-                     width=canvas_width, 
-                     height=canvas_height)
-        
-        # 烟花中心位置（Canvas中心）
-        center_x = canvas_width // 2
-        center_y = canvas_height // 2
-        
-        # Particle colors (bright colors for fireworks)
-        colors = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", 
-                  "#00FFFF", "#FF8800", "#88FF00", "#FF0088", "#0088FF"]
-        
-        # Create particles
+        """完成任务庆祝：居中庆祝卡片 + 主题色礼花（美化版，V2.0.3）。"""
+        # 防重入：销毁上一次未结束的庆祝窗
+        prev = getattr(self, '_celebrate_win', None)
+        if prev and prev.winfo_exists():
+            try:
+                prev.destroy()
+            except Exception:
+                pass
+
+        win = tk.Toplevel(self.root)
+        self._celebrate_win = win
+        win.overrideredirect(True)
+        win.attributes('-topmost', True)
+        TRANS = '#abcdef'          # 透明色键（卡片区域外透出主界面）
+        win.configure(bg=TRANS)
+        try:
+            win.attributes('-transparentcolor', TRANS)
+        except Exception:
+            pass
+        win.attributes('-alpha', 0.0)
+
+        W, H = 420, 320
+        self.root.update_idletasks()
+        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+        rw, rh = self.root.winfo_width(), self.root.winfo_height()
+        x = rx + max(0, (rw - W) // 2)
+        y = ry + max(0, (rh - H) // 2)
+        win.geometry(f"{W}x{H}+{x}+{y}")
+
+        accent = self.T.get('celebrate_accent', '#F1C40F')
+        navy = self.T.get('title_color', '#2C3E50')
+
+        canvas = tk.Canvas(win, width=W, height=H, bg=TRANS, highlightthickness=0)
+        canvas.pack(fill='both', expand=True)
+
+        # 礼花粒子（先画，置于卡片之下，呈现从卡片后迸发的层次）
+        ccx, ccy = W // 2, H // 2
+        conf_palette = [accent, navy, '#5B8FF9', '#E67E22', '#2ECC71']
         particles = []
-        num_particles = 40
-        
-        for i in range(num_particles):
-            # Random angle and speed
-            angle = (2 * math.pi * i) / num_particles + random.uniform(-0.3, 0.3)
-            speed = random.uniform(3, 7)
-            
-            # Initial position (center)
-            x = center_x
-            y = center_y
-            
-            # Velocity
-            vx = math.cos(angle) * speed
-            vy = math.sin(angle) * speed
-            
-            # Random color
-            color = random.choice(colors)
-            
-            # Create oval (particle)
-            size = random.randint(4, 8)
-            particle = canvas.create_oval(
-                x - size, y - size,
-                x + size, y + size,
-                fill=color, outline=color
-            )
-            
-            # Store particle data
-            particles.append({
-                'id': particle,
-                'x': x,
-                'y': y,
-                'vx': vx,
-                'vy': vy,
-                'life': 50,  # Particle life (frames)
-                'max_life': 50,
-                'size': size
-            })
-        
-        # Add celebration text
-        text_id = canvas.create_text(
-            center_x, center_y - 40,
-            text=self.T['complete_msg'],
-            font=("Microsoft YaHei", 16, "bold"),
-            fill="#000000"
-        )
-        
-        # Animate particles
-        self._animate_fireworks(canvas, particles, text_id, 0)
+        for _ in range(80):
+            a = random.uniform(0, math.pi * 2)
+            sp = random.uniform(3, 8)
+            size = random.randint(4, 9)
+            color = random.choice(conf_palette)
+            pid = canvas.create_oval(ccx - size, ccy - size, ccx + size, ccy + size,
+                                     fill=color, outline=color)
+            particles.append({'id': pid, 'x': ccx, 'y': ccy,
+                              'vx': math.cos(a) * sp, 'vy': math.sin(a) * sp - 2,
+                              'size': size, 'life': 70})
+
+        # 卡片：阴影 + 圆角白卡（画在礼花之上，盖住中心）
+        cx, cy, cw, ch = 60, 60, 300, 200
+        self._round_rect(canvas, cx, cy + 6, cw, ch, 18, fill='#d9dee4', outline='#d9dee4')
+        self._round_rect(canvas, cx, cy, cw, ch, 18, fill='#ffffff', outline='#e6ebf0')
+
+        emoji = self.T.get('complete_emoji', '🎉')
+        title = self.T.get('complete_title', '恭喜您，冒险已完成！')
+        sub = self.T.get('complete_sub', '本次冒险已记入战绩')
+        chip = self.T.get('complete_chip', '+10 经验值')
+
+        tk.Label(win, text=emoji, font=('Microsoft YaHei', 46), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
+        tk.Label(win, text=title, font=('Microsoft YaHei', 17, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 106, anchor='center')
+        tk.Label(win, text=sub, font=('Microsoft YaHei', 11), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 134, anchor='center')
+
+        # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
+        chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 12, 'bold'),
+                              fg='#ffffff', bg=TRANS, padx=14, pady=5)
+        chip_label.place(relx=0.5, y=cy + 170, anchor='center')
+        win.update_idletasks()
+        bx = chip_label.winfo_rootx() - win.winfo_rootx()
+        by = chip_label.winfo_rooty() - win.winfo_rooty()
+        bw = chip_label.winfo_width()
+        bh = chip_label.winfo_height()
+        self._round_rect(canvas, bx - 2, by - 2, bw + 4, bh + 4, 10, fill=accent, outline=accent)
+
+        # 入场淡入 + 光环 + 礼花动画
+        self._celebrate_fade(win, 1.0, 1)
+        self._celebrate_ring(canvas, ccx, ccy, 0, accent)
+        self._celebrate_confetti(canvas, particles, 0)
+
+        # 约 2.4s 后淡出销毁
+        win.after(2400, lambda: self._celebrate_fade(win, 0.0, -1, done=lambda: self._safe_destroy(win)))
     
-    def _animate_fireworks(self, canvas, particles, text_id, step):
-        """Animate fireworks particles."""
-        if step >= 50:  # Animation ends after 50 frames (~1.5 seconds)
-            canvas.destroy()
+    def _round_rect(self, c, x, y, w, h, r, fill, outline):
+        """在 Canvas 上画圆角矩形（四角圆弧拼法）。"""
+        c.create_arc(x, y, x + 2*r, y + 2*r, start=90, extent=90, style='pieslice', fill=fill, outline=outline)
+        c.create_arc(x + w - 2*r, y, x + w, y + 2*r, start=0, extent=90, style='pieslice', fill=fill, outline=outline)
+        c.create_arc(x, y + h - 2*r, x + 2*r, y + h, start=180, extent=90, style='pieslice', fill=fill, outline=outline)
+        c.create_arc(x + w - 2*r, y + h - 2*r, x + w, y + h, start=270, extent=90, style='pieslice', fill=fill, outline=outline)
+        c.create_rectangle(x + r, y, x + w - r, y + h, fill=fill, outline=outline)
+        c.create_rectangle(x, y + r, x + w, y + h - r, fill=fill, outline=outline)
+
+    def _safe_destroy(self, win):
+        try:
+            win.destroy()
+        except Exception:
+            pass
+
+    def _celebrate_fade(self, win, target, step, done=None):
+        """淡入/淡出整个庆祝窗（step>0 淡入，step<0 淡出）。"""
+        try:
+            cur = win.attributes('-alpha')
+        except Exception:
+            cur = 1.0
+        if step > 0 and cur < target:
+            cur = min(target, cur + 0.08)
+            try:
+                win.attributes('-alpha', cur)
+            except Exception:
+                pass
+            win.after(30, lambda: self._celebrate_fade(win, target, step, done))
+        elif step < 0 and cur > target:
+            cur = max(target, cur - 0.08)
+            try:
+                win.attributes('-alpha', cur)
+            except Exception:
+                pass
+            win.after(30, lambda: self._celebrate_fade(win, target, step, done))
+        else:
+            if done:
+                done()
+
+    def _celebrate_confetti(self, canvas, particles, step):
+        if step > 65:
             return
-        
-        # Update particles
         for p in particles:
             if p['life'] <= 0:
                 continue
-            
-            # Apply gravity
-            p['vy'] += 0.15
-            
-            # Update position
+            p['vy'] += 0.12
             p['x'] += p['vx']
             p['y'] += p['vy']
-            
-            # Decrease life
             p['life'] -= 1
-            
-            # Update Canvas
             try:
-                # Move particle
-                canvas.coords(
-                    p['id'],
-                    p['x'] - p['size'], p['y'] - p['size'],
-                    p['x'] + p['size'], p['y'] + p['size']
-                )
-                
-                # Fade effect (change color alpha)
-                alpha = p['life'] / p['max_life']
-                if alpha > 0:
-                    # Make particle smaller as it fades
-                    new_size = int(p['size'] * alpha)
-                    canvas.coords(
-                        p['id'],
-                        p['x'] - new_size, p['y'] - new_size,
-                        p['x'] + new_size, p['y'] + new_size
-                    )
-            except:
+                canvas.coords(p['id'], p['x'] - p['size'], p['y'] - p['size'],
+                              p['x'] + p['size'], p['y'] + p['size'])
+            except Exception:
                 pass
-        
-        # Fade out text in the last 20 frames
-        if step > 30:
-            try:
-                alpha = int(255 * (1 - (step - 30) / 20))
-                # Note: Canvas text doesn't support alpha easily, so we just keep it visible
-            except:
-                pass
-        
-        # Continue animation
-        self.root.after(30, lambda: self._animate_fireworks(canvas, particles, text_id, step + 1))
+        canvas.after(30, lambda: self._celebrate_confetti(canvas, particles, step + 1))
+
+    def _celebrate_ring(self, canvas, cx, cy, step, accent):
+        if step > 18:
+            return
+        r = 28 + step * 7
+        try:
+            canvas.delete('cring')
+            canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                               outline=accent, width=3, tags='cring')
+        except Exception:
+            pass
+        canvas.after(25, lambda: self._celebrate_ring(canvas, cx, cy, step + 1, accent))
     
     def update_game_display(self):
         """Update growth system panels in stats tab (V1.6.0：每周智慧系统)."""
