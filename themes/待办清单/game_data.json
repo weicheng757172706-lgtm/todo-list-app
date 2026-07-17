@@ -1,0 +1,18 @@
+{
+  "total_wisdom": 0,
+  "weekly_wisdom": 0,
+  "weekly_level": 1,
+  "week_start_date": "2026-07-13",
+  "weekly_history": [],
+  "achievements": [
+    "first_completion",
+    "complete_10",
+    "complete_50"
+  ],
+  "stats": {
+    "total_completed": 72,
+    "total_added": 60,
+    "current_streak": 0,
+    "longest_streak": 0
+  }
+}
