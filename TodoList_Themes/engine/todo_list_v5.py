@@ -932,7 +932,7 @@ class TodoApp:
                               'size': size, 'life': 70})
 
         # 卡片：阴影 + 圆角白卡（画在礼花之上，盖住中心）
-        cx, cy, cw, ch = 30, 30, 320, 240
+        cx, cy, cw, ch = 18, 18, 344, 264
         self._round_rect(canvas, cx, cy + 6, cw, ch, 18, fill='#d9dee4', outline='#d9dee4')
         self._round_rect(canvas, cx, cy, cw, ch, 18, fill='#ffffff', outline='#e6ebf0')
 
@@ -943,14 +943,14 @@ class TodoApp:
         chip_fg = self.T.get('chip_fg', '#2C3E50')
         chip_bg = self.T.get('chip_bg', '#F1C40F')
 
-        tk.Label(win, text=emoji, font=('Microsoft YaHei', 50), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
-        tk.Label(win, text=title, font=('Microsoft YaHei', 18, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 108, anchor='center')
-        tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 140, anchor='center')
+        tk.Label(win, text=emoji, font=('Microsoft YaHei', 50), bg='#ffffff').place(relx=0.5, y=cy + 50, anchor='center')
+        tk.Label(win, text=title, font=('Microsoft YaHei', 18, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 118, anchor='center')
+        tk.Label(win, text=sub, font=('Microsoft YaHei', 12), fg='#8a97a0', bg='#ffffff').place(relx=0.5, y=cy + 152, anchor='center')
 
         # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
         chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 13, 'bold'),
                               fg=chip_fg, bg=TRANS, padx=16, pady=6)
-        chip_label.place(relx=0.5, y=cy + 206, anchor='center')
+        chip_label.place(relx=0.5, y=cy + 232, anchor='center')
         win.update_idletasks()
         bx = chip_label.winfo_rootx() - win.winfo_rootx()
         by = chip_label.winfo_rooty() - win.winfo_rooty()
