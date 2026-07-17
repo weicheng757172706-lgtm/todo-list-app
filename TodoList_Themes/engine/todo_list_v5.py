@@ -165,6 +165,8 @@ DEFAULT_THEME = {
         "complete_sub": "本次冒险已记入战绩",
         "complete_chip": "+10 经验值",
         "celebrate_accent": "#F1C40F",
+        "chip_bg": "#F1C40F",
+        "chip_fg": "#2C3E50",
         "wisdom_anim": "🧠 智慧 +{} 🧠",
         # ── 状态栏 / 对话框 / 右键菜单 / 提示（原硬编码，抽主题以便清单套去冒险味）──
         "msg_new_task_gen": "🎯 新冒险已生成！",
@@ -938,6 +940,8 @@ class TodoApp:
         title = self.T.get('complete_title', '恭喜您，冒险已完成！')
         sub = self.T.get('complete_sub', '本次冒险已记入战绩')
         chip = self.T.get('complete_chip', '+10 经验值')
+        chip_fg = self.T.get('chip_fg', '#2C3E50')
+        chip_bg = self.T.get('chip_bg', '#F1C40F')
 
         tk.Label(win, text=emoji, font=('Microsoft YaHei', 46), bg='#ffffff').place(relx=0.5, y=cy + 46, anchor='center')
         tk.Label(win, text=title, font=('Microsoft YaHei', 17, 'bold'), fg=navy, bg='#ffffff').place(relx=0.5, y=cy + 106, anchor='center')
@@ -945,14 +949,14 @@ class TodoApp:
 
         # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
         chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 12, 'bold'),
-                              fg='#ffffff', bg=TRANS, padx=14, pady=5)
+                              fg=chip_fg, bg=TRANS, padx=14, pady=5)
         chip_label.place(relx=0.5, y=cy + 170, anchor='center')
         win.update_idletasks()
         bx = chip_label.winfo_rootx() - win.winfo_rootx()
         by = chip_label.winfo_rooty() - win.winfo_rooty()
         bw = chip_label.winfo_width()
         bh = chip_label.winfo_height()
-        self._round_rect(canvas, bx - 2, by - 2, bw + 4, bh + 4, 10, fill=accent, outline=accent)
+        self._round_rect(canvas, bx - 2, by - 2, bw + 4, bh + 4, 10, fill=chip_bg, outline=chip_bg)
 
         # 入场淡入 + 光环 + 礼花动画
         self._celebrate_fade(win, 1.0, 1)
@@ -1021,7 +1025,7 @@ class TodoApp:
     def _celebrate_ring(self, canvas, cx, cy, step, accent):
         if step > 18:
             return
-        r = 28 + step * 7
+        r = 20 + step * 3
         try:
             canvas.delete('cring')
             canvas.create_oval(cx - r, cy - r, cx + r, cy + r,

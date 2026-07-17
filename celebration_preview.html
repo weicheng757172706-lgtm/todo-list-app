@@ -64,16 +64,16 @@
   .sub { font-size: 13px; color: #8a97a0; margin-top: 8px; }
   .chip {
     display: inline-block; margin-top: 14px; padding: 5px 14px;
-    background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+    background: var(--chip-bg); color: var(--chip-fg); font-size: 13px; font-weight: 700;
     border-radius: 999px;
   }
   .ring {
-    position:absolute; left:50%; top:46px; width: 80px; height: 80px;
-    margin-left:-40px; border-radius:50%;
+    position:absolute; left:50%; top:50%; width: 80px; height: 80px;
+    margin:-40px 0 0 -40px; border-radius:50%;
     border: 3px solid var(--accent); opacity:0;
   }
   .ring.play { animation: ring .6s ease-out forwards; }
-  @keyframes ring { 0%{transform:scale(.4);opacity:.9;} 100%{transform:scale(2.4);opacity:0;} }
+  @keyframes ring { 0%{transform:scale(.4);opacity:.9;} 100%{transform:scale(1.5);opacity:0;} }
 
   /* 控制条 */
   .controls { margin-top: 18px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
@@ -85,8 +85,8 @@
   .controls button:hover { filter: brightness(1.05); }
 
   /* 主题变量 */
-  .app.theme-shuangjian { --title:#2C3E50; --accent:#F1C40F; }
-  .app.theme-qingdan    { --title:#2C3E50; --accent:#4F81BD; }
+  .app.theme-shuangjian { --title:#2C3E50; --accent:#F1C40F; --chip-bg:#F1C40F; --chip-fg:#2C3E50; }
+  .app.theme-qingdan    { --title:#2C3E50; --accent:#4F81BD; --chip-bg:#F1C40F; --chip-fg:#2C3E50; }
 </style>
 </head>
 <body>
