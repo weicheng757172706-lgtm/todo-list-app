@@ -878,7 +878,7 @@ class TodoApp:
         sub = self.T.get('complete_sub', '') or ''
         chip = self.T.get('complete_chip', '+10 经验值')
         chip_fg = self.T.get('chip_fg', '#2C3E50')
-        chip_bg = self.T.get('chip_bg', '#F1C40F')
+        chip_bg = self.T.get('chip_bg', '#FFD700')
 
         # emoji 与标题改为 canvas 文字（透明背景），避免白底 Label 遮挡光环
         canvas.create_text(W // 2, cy + 90, text=emoji, font=('Microsoft YaHei', 46),
@@ -889,16 +889,19 @@ class TodoApp:
             canvas.create_text(W // 2, cy + 170, text=sub, font=('Microsoft YaHei', 12),
                                fill='#8a97a0', anchor='center', tags='ctext')
 
-        # 经验值药丸：canvas 圆角底衬 + 透明底 Label 文字
-        chip_label = tk.Label(win, text=chip, font=('Microsoft YaHei', 13, 'bold'),
-                              fg=chip_fg, bg=TRANS, padx=18, pady=7)
-        chip_label.place(relx=0.5, y=cy + 192, anchor='center')
-        win.update_idletasks()
-        bx = chip_label.winfo_rootx() - win.winfo_rootx()
-        by = chip_label.winfo_rooty() - win.winfo_rooty()
-        bw = chip_label.winfo_width()
-        bh = chip_label.winfo_height()
-        self._round_rect(canvas, bx - 2, by - 2, bw + 4, bh + 4, 10, fill=chip_bg, outline=chip_bg)
+        # 经验值药丸：纯 canvas 实现（金色圆角胶囊底衬 + 文字），背景可控不为透明
+        chip_font = ('Microsoft YaHei', 13, 'bold')
+        chip_y = cy + 198  # 标题在 cy+130，中心间距 68px
+        ct = canvas.create_text(W // 2, chip_y, text=chip, font=chip_font,
+                                fill=chip_fg, anchor='center', tags='ctext')
+        bb = canvas.bbox(ct)
+        pad_x, pad_y = 16, 8
+        rx1, ry1 = bb[0] - pad_x, bb[1] - pad_y
+        rx2, ry2 = bb[2] + pad_x, bb[3] + pad_y
+        cr = max(6, (ry2 - ry1) // 2)
+        self._round_rect(canvas, rx1, ry1, rx2 - rx1, ry2 - ry1, cr,
+                         fill=chip_bg, outline=chip_bg)
+        canvas.tag_raise(ct)  # 文字置顶，金色胶囊衬底
 
         # 入场淡入 + 光环 + 礼花动画
         self._celebrate_fade(win, 1.0, 1)
