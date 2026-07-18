@@ -754,6 +754,12 @@ class TodoApp:
     
     def show_level_up_animation(self):
         """Show level up animation (V1.6.0：每周智慧系统)."""
+        # 若庆祝窗正在显示或即将显示，先排队，等其销毁后再弹，
+        # 避免升级窗被全屏庆祝窗遮挡、且其 grab_set 在庆祝期间卡死主界面
+        if getattr(self, '_celebrate_pending', False) or \
+           (getattr(self, '_celebrate_win', None) and self._celebrate_win.winfo_exists()):
+            self._pending_levelup = True
+            return
         level_up_window = tk.Toplevel(self.root)
         level_up_window.title(self.T['levelup_title'])
         level_up_window.geometry("380x300")
@@ -881,8 +887,9 @@ class TodoApp:
         chip_bg = self.T.get('chip_bg', '#FFD700')
 
         # emoji 与标题改为 canvas 文字（透明背景），避免白底 Label 遮挡光环
-        canvas.create_text(W // 2, cy + 90, text=emoji, font=('Microsoft YaHei', 46),
-                           fill=navy, anchor='center', tags='ctext')
+        # emoji 不设 fill 强染色，保留原生彩色渲染（🏆 自然金色立体奖杯）
+        canvas.create_text(W // 2, cy + 90, text=emoji, font=('Segoe UI Emoji', 46),
+                           anchor='center', tags='ctext')
         canvas.create_text(W // 2, cy + 130, text=title, font=('Microsoft YaHei', 17, 'bold'),
                            fill=navy, anchor='center', tags='ctext')
         if sub:
@@ -909,7 +916,8 @@ class TodoApp:
         self._celebrate_confetti(canvas, particles, 0)
 
         # 约 2.4s 后淡出销毁
-        win.after(2400, lambda: self._celebrate_fade(win, 0.0, -1, done=lambda: self._safe_destroy(win)))
+        win.after(2400, lambda: self._celebrate_fade(win, 0.0, -1,
+                 done=lambda: (self._safe_destroy(win), self._on_celebrate_done())))
     
     def _round_rect(self, c, x, y, w, h, r, fill, outline):
         """在 Canvas 上画圆角矩形（四角圆弧拼法）。"""
@@ -925,6 +933,13 @@ class TodoApp:
             win.destroy()
         except Exception:
             pass
+
+    def _on_celebrate_done(self):
+        """庆祝窗销毁后回调：解除'庆祝即将显示'标记，并弹出排队的等级提升窗。"""
+        self._celebrate_pending = False
+        if getattr(self, '_pending_levelup', False):
+            self._pending_levelup = False
+            self.show_level_up_animation()
 
     def _celebrate_fade(self, win, target, step, done=None):
         """淡入/淡出整个庆祝窗（step>0 淡入，step<0 淡出）。"""
@@ -2026,6 +2041,7 @@ class TodoApp:
         priority = task.get("priority", "")
         amount = self.WISDOM_BY_PRIORITY.get(priority, 5)  # 默认5智慧
         task["wisdom_gain"] = amount  # 记录贡献分，随任务进入 completed 保留
+        self._celebrate_pending = True  # 标记庆祝窗即将显示，使升级窗排队于其后
         self.add_wisdom(amount)
         self.save_game_data()
         self.update_game_display()
