@@ -415,6 +415,9 @@ class TodoApp:
 
         # Task category options —— 主题化
         self.category_options = THEME['category_options']
+
+        # 用户成长配置覆盖（不污染主题，存本机 growth_config.json）
+        self._apply_growth_config()
         
         # Tag options (predefined tags for quick selection)
         self.predefined_tags = ["紧急", "重要", "待讨论", "进行中", "阻塞", "待审核"]
@@ -1094,6 +1097,186 @@ class TodoApp:
             print(f"Error saving data: {e}")
             messagebox.showerror("错误", f"保存数据失败:\n{str(e)}")
     
+    # ── 用户成长配置（可自定义级别称号/阈值、档位名、各档位智慧值；存本机不污染主题）──
+    def growth_config_path(self):
+        return os.path.join(os.path.dirname(self.data_file), "growth_config.json")
+
+    def load_growth_config(self):
+        p = self.growth_config_path()
+        if os.path.exists(p):
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def save_growth_config(self, cfg):
+        try:
+            with open(self.growth_config_path(), 'w', encoding='utf-8') as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving growth config: {e}")
+            return False
+
+    def _apply_growth_config(self):
+        """启动时用用户本地配置覆盖默认成长系统（级别/档位名/智慧值）。"""
+        cfg = self.load_growth_config()
+        if not cfg:
+            return
+        # 档位名（固定4档，按位置；不足用主题默认补齐）
+        if isinstance(cfg.get('priority_options'), list) and cfg['priority_options']:
+            opts = [str(x) for x in cfg['priority_options']][:4]
+            defaults = THEME['priority_options']
+            while len(opts) < 4:
+                fill = defaults[len(opts)] if len(opts) < len(defaults) else f"档位{len(opts) + 1}"
+                opts.append(fill)
+            self.priority_options = opts
+            self.priority_colors = dict(zip(self.priority_options,
+                                            ["#FFCCCC", "#FFF2CC", "#D9EAD3", "#C9DAF8"]))
+        # 各档位智慧值（按档位名映射，回退默认位置值）
+        if isinstance(cfg.get('wisdom_by_priority'), dict):
+            defaults = [20, 20, 10, 5]
+            self.WISDOM_BY_PRIORITY = {
+                p: int(cfg['wisdom_by_priority'].get(p, defaults[i]))
+                for i, p in enumerate(self.priority_options)
+            }
+        # 成长级别（固定6级，校验结构）
+        lv = cfg.get('levels')
+        if isinstance(lv, list) and len(lv) == 6:
+            if all(isinstance(x, dict) and 'name' in x and 'min' in x and 'max' in x for x in lv):
+                THEME['levels'] = lv
+                self.LEVELS = THEME['levels']
+
+    def _migrate_priority_names(self, old_opts, new_opts):
+        """档位名变化时，按位置映射迁移 self.data 中任务的 priority 字段（含支线）。"""
+        if old_opts == new_opts:
+            return
+        mapping = {old_opts[i]: new_opts[i] for i in range(min(len(old_opts), len(new_opts)))}
+        if not mapping:
+            return
+        changed = False
+        for sec in ('pending', 'completed'):
+            for t in self.data.get(sec, []):
+                if t.get('priority') in mapping:
+                    t['priority'] = mapping[t['priority']]
+                    changed = True
+                for sub in t.get('subtasks', []):
+                    if sub.get('priority') in mapping:
+                        sub['priority'] = mapping[sub['priority']]
+                        changed = True
+        if changed:
+            self.save_data()
+
+    def open_growth_settings(self):
+        """成长系统设置对话框：自定义级别称号/阈值、档位名、各档位智慧值。"""
+        win = tk.Toplevel(self.root)
+        win.title("成长系统设置")
+        win.transient(self.root)
+        win.grab_set()
+        win.resizable(True, True)
+
+        levels = [dict(x) for x in THEME['levels']]
+        pri_opts = list(self.priority_options)
+        wis = dict(self.WISDOM_BY_PRIORITY)
+
+        # ── 区1：成长级别（6 级，称号 + 阈值）──
+        f1 = tk.LabelFrame(win, text="成长级别（称号 + 智慧区间）", font=self.font_label, padx=10, pady=8)
+        f1.pack(fill=tk.X, padx=12, pady=(8, 4))
+        hdr = tk.Frame(f1)
+        hdr.pack(fill=tk.X)
+        for t, w in (("级别", 8), ("称号", 18), ("智慧下限", 12), ("智慧上限", 12)):
+            tk.Label(hdr, text=t, width=w).pack(side=tk.LEFT)
+        name_vars, min_vars, max_vars = [], [], []
+        for i, lv in enumerate(levels, 1):
+            row = tk.Frame(f1)
+            row.pack(fill=tk.X, pady=2)
+            tk.Label(row, text=f"Lv.{i}", width=8).pack(side=tk.LEFT)
+            nv = tk.StringVar(value=lv.get('name', ''))
+            tk.Entry(row, textvariable=nv, width=16).pack(side=tk.LEFT, padx=2)
+            mnv = tk.StringVar(value=str(lv.get('min', 0)))
+            mxv = tk.StringVar(value=str(lv.get('max', 0)))
+            tk.Entry(row, textvariable=mnv, width=10).pack(side=tk.LEFT, padx=2)
+            tk.Entry(row, textvariable=mxv, width=10).pack(side=tk.LEFT, padx=2)
+            name_vars.append(nv)
+            min_vars.append(mnv)
+            max_vars.append(mxv)
+
+        # ── 区2：档位名 + 对应智慧值 ──
+        f2 = tk.LabelFrame(win, text="任务档位（名称 + 对应智慧值）", font=self.font_label, padx=10, pady=8)
+        f2.pack(fill=tk.X, padx=12, pady=(4, 4))
+        pname_vars, pval_vars = [], []
+        for p in pri_opts:
+            row = tk.Frame(f2)
+            row.pack(fill=tk.X, pady=2)
+            pv = tk.StringVar(value=p)
+            tk.Entry(row, textvariable=pv, width=16).pack(side=tk.LEFT, padx=2)
+            vv = tk.StringVar(value=str(wis.get(p, 5)))
+            tk.Entry(row, textvariable=vv, width=10).pack(side=tk.LEFT, padx=2)
+            pname_vars.append(pv)
+            pval_vars.append(vv)
+
+        tip = tk.Label(win, text="提示：修改级别阈值会即时影响当前等级显示；修改档位名会自动迁移已有任务的档位归属。",
+                       font=("Microsoft YaHei", 9), fg="#8a97a0", wraplength=520, justify=tk.LEFT)
+        tip.pack(fill=tk.X, padx=12, pady=(2, 2))
+
+        def do_save():
+            new_levels = []
+            for i in range(6):
+                try:
+                    mn = int(min_vars[i].get())
+                    mx = int(max_vars[i].get())
+                except ValueError:
+                    messagebox.showerror("输入错误", f"Lv.{i + 1} 的阈值请输入整数")
+                    return
+                if mn < 0 or mx <= mn:
+                    messagebox.showerror("输入错误", f"Lv.{i + 1} 上限须大于下限且非负")
+                    return
+                new_levels.append({"name": name_vars[i].get().strip() or f"级别{i + 1}",
+                                   "min": mn, "max": mx})
+            new_opts = [v.get().strip() for v in pname_vars]
+            if any(not x for x in new_opts):
+                messagebox.showerror("输入错误", "档位名称不能为空")
+                return
+            new_wis = {}
+            for i, p in enumerate(new_opts):
+                try:
+                    val = int(pval_vars[i].get())
+                except ValueError:
+                    messagebox.showerror("输入错误", f"档位「{p}」的智慧值请输入整数")
+                    return
+                new_wis[p] = max(0, val)
+            old_opts = list(self.priority_options)
+            if new_opts != old_opts:
+                self._migrate_priority_names(old_opts, new_opts)
+            cfg = {"levels": new_levels, "priority_options": new_opts, "wisdom_by_priority": new_wis}
+            if not self.save_growth_config(cfg):
+                messagebox.showerror("保存失败", "配置文件写入失败")
+                return
+            self._apply_growth_config()
+            self.update_game_display()
+            if hasattr(self, 'priority_combo'):
+                self.priority_combo['values'] = self.priority_options
+            if hasattr(self, 'priority_var') and self.priority_var.get() not in self.priority_options:
+                self.priority_var.set(self.priority_options[0])
+            messagebox.showinfo("已保存", "成长系统设置已保存并生效，重启后自动加载。")
+            win.destroy()
+
+        btn_frame = tk.Frame(win)
+        btn_frame.pack(fill=tk.X, padx=12, pady=(4, 12))
+        tk.Button(btn_frame, text="取消", command=win.destroy, font=self.font_label).pack(side=tk.RIGHT, padx=6)
+        tk.Button(btn_frame, text="保存", command=do_save, bg=THEME['colors']['accent'],
+                  fg="white", font=self.font_label).pack(side=tk.RIGHT, padx=6)
+
+        win.update_idletasks()
+        w, h = win.winfo_width(), win.winfo_height()
+        if w < 2:
+            w, h = 560, 420
+        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+        rw, rh = self.root.winfo_width(), self.root.winfo_height()
+        win.geometry(f"{w}x{h}+{rx + (rw - w) // 2}+{ry + (rh - h) // 2}")
+
     def sync_daily_summary(self):
         """将「今日已完成 + 进行中」同步写入 daily_summary.txt（UTF-8 无 BOM），供快速汇报省 token。
         在 save_data 末尾自动调用；只写不读，异常仅打印不影响主程序。
@@ -1852,6 +2035,11 @@ class TodoApp:
             bg=THEME['colors']['title_bar'], fg="#BDC3C7"
         )
         self.exp_detail_label.pack(anchor=tk.W, pady=(2, 0))
+
+        # 成长系统设置入口（用户可自定义级别称号/阈值、档位名、各档位智慧值）
+        tk.Button(exp_card, text="⚙ 成长设置", font=("Microsoft YaHei", 10),
+                  command=self.open_growth_settings,
+                  bg=THEME['colors']['panel_bg'], fg=THEME['colors']['accent']).pack(anchor=tk.E, pady=(6, 0))
         
         # ── 1. Week filter ──
         filter_frame = tk.Frame(container)
