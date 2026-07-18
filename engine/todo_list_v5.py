@@ -912,7 +912,7 @@ class TodoApp:
 
         # 入场淡入 + 光环 + 礼花动画
         self._celebrate_fade(win, 1.0, 1)
-        self._celebrate_ring(canvas, ccx, cy + 110, 0, accent)
+        self._celebrate_ring(canvas, ccx, cy + 100, 0, accent)
         self._celebrate_confetti(canvas, particles, 0)
 
         # 约 2.4s 后淡出销毁
