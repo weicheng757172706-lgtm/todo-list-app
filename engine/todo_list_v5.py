@@ -888,7 +888,7 @@ class TodoApp:
 
         # emoji 与标题改为 canvas 文字（透明背景），避免白底 Label 遮挡光环
         # emoji 不设 fill 强染色，保留原生彩色渲染（🏆 自然金色立体奖杯）
-        canvas.create_text(W // 2, cy + 90, text=emoji, font=('Segoe UI Emoji', 46),
+        canvas.create_text(W // 2, cy + 80, text=emoji, font=('Segoe UI Emoji', 46),
                            anchor='center', tags='ctext')
         canvas.create_text(W // 2, cy + 130, text=title, font=('Microsoft YaHei', 17, 'bold'),
                            fill=navy, anchor='center', tags='ctext')
