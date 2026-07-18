@@ -152,7 +152,7 @@ DEFAULT_THEME = {
         "complete_emoji": "🏆",
         "complete_title": "恭喜您，冒险已完成！",
         "complete_sub": "",
-        "complete_chip": "+10 经验值",
+        "complete_chip": "+{amount} 经验值",
         "celebrate_accent": "#F1C40F",
         "chip_bg": "#F1C40F",
         "chip_fg": "#2C3E50",
@@ -823,8 +823,10 @@ class TodoApp:
         
         self.animation_after_id = self.root.after(30, lambda: self._animate_new_task(step + 1))
     
-    def show_fireworks_animation(self):
-        """完成任务庆祝：居中庆祝卡片 + 主题色礼花（美化版，V2.0.3）。"""
+    def show_fireworks_animation(self, amount=None):
+        """完成任务庆祝：居中庆祝卡片 + 主题色礼花（美化版，V2.0.3）。
+        amount：本次任务按优先级对应的智慧/经验值，用于动态生成药丸文案；
+        None 时回退主题默认（兼容非任务完成场景的调用）。"""
         # 防重入：销毁上一次未结束的庆祝窗
         prev = getattr(self, '_celebrate_win', None)
         if prev and prev.winfo_exists():
@@ -882,7 +884,17 @@ class TodoApp:
         emoji = self.T.get('complete_emoji', '🏆')
         title = self.T.get('complete_title', '恭喜您，冒险已完成！')
         sub = self.T.get('complete_sub', '') or ''
-        chip = self.T.get('complete_chip', '+10 经验值')
+        # 药丸文案随任务级别的智慧值动态生成（成长系统 WISDOM_BY_PRIORITY）
+        chip_tmpl = self.T.get('complete_chip', '+{amount} 经验值')
+        if amount is not None:
+            if '{amount}' in chip_tmpl:
+                chip = chip_tmpl.format(amount=amount)
+            else:
+                # 兼容旧模板（写死数字，无占位符）：把首个数字替换为实际智慧值
+                import re
+                chip = re.sub(r'\d+', str(amount), chip_tmpl, count=1)
+        else:
+            chip = chip_tmpl.replace('{amount}', '10')
         chip_fg = self.T.get('chip_fg', '#2C3E50')
         chip_bg = self.T.get('chip_bg', '#FFD700')
 
@@ -2048,7 +2060,7 @@ class TodoApp:
 
         # 动画（与完成语义绑定，统一在此播放）
         self.show_wisdom_animation(amount)
-        self.show_fireworks_animation()
+        self.show_fireworks_animation(amount)
         return True
 
     def complete_task(self):
